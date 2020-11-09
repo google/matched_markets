@@ -17,6 +17,7 @@
 
 from matched_markets.methodology import common_classes
 from matched_markets.methodology import utils
+import altair as alt
 import numpy as np
 import pandas as pd
 
@@ -175,6 +176,30 @@ class UtilsTest(unittest.TestCase):
                 'treatment': [0, 1, 1, 1],
                 'exclude': [0, 1, 0, 1]
             })))
+
+  def testPlotIroasOverTime(self):
+    iroas_df = pd.DataFrame({
+        'date': [
+            '2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04', '2020-01-05'
+        ],
+        'lower': [0, 0.5, 1, 1.5, 2],
+        'mean': [1, 1.5, 2, 2.5, 3],
+        'upper': [2, 2.5, 3, 3.5, 4]
+    })
+    experiment_dates = pd.DataFrame({
+        'date': ['2020-01-01', '2020-01-02', '2020-01-03', '2020-01-04'],
+        'color': [
+            'Pretest period', 'Pretest period', 'Experiment period',
+            'Experiment period'
+        ]
+    })
+    cooldown_date = pd.DataFrame({
+        'date': ['2020-01-05'],
+        'color': ['End of cooldown period']
+    })
+    iroas_chart = utils.plot_iroas_over_time(iroas_df, experiment_dates,
+                                             cooldown_date)
+    self.assertIsInstance(iroas_chart, alt.LayerChart)
 
 
 if __name__ == '__main__':

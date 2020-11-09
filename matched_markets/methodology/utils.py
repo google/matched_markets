@@ -18,6 +18,7 @@ import random
 import re
 from typing import List
 
+import altair as alt
 from matched_markets.methodology import common_classes
 import numpy as np
 import pandas as pd
@@ -252,12 +253,81 @@ def default_geo_assignment(geo_level_time_series: pd.DataFrame,
     geo_eligibility['geo'] = pd.to_numeric(geo_eligibility['geo'])
 
   missing_geos = list(
-      set(geo_level_time_series['geo']) -
-      set(geo_eligibility['geo']))
+      set(geo_level_time_series['geo']) - set(geo_eligibility['geo']))
 
-  return geo_eligibility.append(pd.DataFrame({
-      'geo': missing_geos,
-      'control': 1,
-      'treatment': 1,
-      'exclude': 1
-  })).sort_values(by='geo').reset_index(drop=True)
+  return geo_eligibility.append(
+      pd.DataFrame({
+          'geo': missing_geos,
+          'control': 1,
+          'treatment': 1,
+          'exclude': 1
+      })).sort_values(by='geo').reset_index(drop=True)
+
+
+def plot_iroas_over_time(iroas_df: pd.DataFrame, experiment_dates: pd.DataFrame,
+                         cooldown_date: pd.DataFrame):
+  """Returns a chart of the iROAS estimate over time with confidence bands.
+
+  This function provides a visualization of the evolution of the iROAS estimate
+  over the duration of the experiment and cooldown, together with confidence
+  bands.
+
+  Args:
+    iroas_df: a dataframe with columns: date, lower, mean, upper
+    experiment_dates: dataframe with columns (date, color) which contains two
+      dates for each period (start, end), and the column color is the label
+      used in the chart to refer to the corresponding period, e.g. "Experiment
+      period" or "Pretes period".
+    cooldown_date: dataframe with column (date, color) with only one entry,
+      where date indicates the last day in the cooldown period, and color is the
+      label used in the plot legend, e.g. "End of cooldown period".
+
+  Returns:
+    iroas_chart: Chart containing the plot.
+  """
+  iroas_base = alt.Chart(iroas_df).mark_line().encode(
+      x=alt.X('date:T', axis=alt.Axis(title='', format=('%b %e'))))
+
+  iroas_selection = alt.selection_single(
+      fields=['date'],
+      nearest=True,
+      on='mouseover',
+      empty='none',
+      clear='mouseout')
+
+  iroas_lines = iroas_base.mark_line().encode(
+      y=alt.Y('mean:Q', axis=alt.Axis(title=' ', format='.1')))
+
+  iroas_points = iroas_lines.mark_point().transform_filter(iroas_selection)
+
+  iroas_rule1 = iroas_base.mark_rule().encode(
+      tooltip=['date:T', 'mean:Q', 'lower:Q', 'upper:Q'])
+
+  iroas_rule = iroas_rule1.encode(
+      opacity=alt.condition(iroas_selection, alt.value(0.3), alt.value(
+          0))).add_selection(iroas_selection)
+
+  iroas_ci_bands_rule = alt.Chart(iroas_df).mark_area(color='gray').encode(
+      alt.X('date:T'), y='lower:Q', y2='upper:Q', opacity=alt.value(0.5))
+
+  date_rule = alt.Chart(
+      experiment_dates[experiment_dates['color'] ==
+                       'Experiment period']).mark_rule(strokeWidth=2).encode(
+                           x='date:T',
+                           color=alt.Color(
+                               'color',
+                               scale=alt.Scale(
+                                   domain=[
+                                       'Experiment period',
+                                       'End of cooldown period',
+                                       'iROAS estimate'
+                                   ],
+                                   range=['black', 'black', '#1f77b4'])))
+  cooldown_date_rule = alt.Chart(cooldown_date).mark_rule(
+      strokeWidth=2, strokeDash=[5, 2], color='black').encode(
+          x='date:T', color='color:N')
+  # Compile chart
+  iroas_chart = alt.layer(iroas_lines, iroas_rule, iroas_points, date_rule,
+                          cooldown_date_rule, iroas_ci_bands_rule)
+
+  return iroas_chart

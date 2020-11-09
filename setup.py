@@ -21,8 +21,8 @@ __version__ = '1.0.0'
 PROJECT_NAME = 'matched_markets'
 
 REQUIRED_PACKAGES = [
-    'absl-py', 'numpy>=1.8.0rc1', 'pandas', 'matplotlib', 'scipy', 'seaborn',
-    'six', 'statsmodels'
+    'absl-py', 'altair', 'numpy>=1.8.0rc1', 'pandas', 'matplotlib', 'scipy',
+    'seaborn', 'six', 'statsmodels'
 ]
 
 setuptools.setup(
