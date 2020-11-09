@@ -73,9 +73,9 @@ following one of the notebooks, and the recommended way of opening them is
 Google Colaboratory.
 
 * Design a Matched Markets geo experiment.
-   - [GeoX Design with Matched Markets and TBR](./notebooks/design_colab_for_tbrmm.ipynb).
+   - [GeoX Design with Matched Markets and TBR](https://colab.sandbox.google.com/github/google/matched_markets/blob/master/matched_markets/notebook/design_colab_for_tbrmm.ipynb).
 * Post analysis of a geo experiment from a Matched Markets design
-   - [GeoX Post Analysis with TBR](./notebooks/post_analysis_colab_for_tbrmm.ipynb).
+   - [GeoX Post Analysis with TBR](https://colab.sandbox.google.com/github/google/matched_markets/blob/master/matched_markets/notebook/post_analysis_colab_for_tbrmm.ipynb).
 
 ## Contribution
 
