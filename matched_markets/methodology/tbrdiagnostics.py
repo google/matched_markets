@@ -280,7 +280,7 @@ class TBRDiagnostics(object):
 
     data = data.pivot_table(index=self._df_names.geo,
                             columns=self._df_names.date,
-                            values=self._target, aggfunc=np.sum)
+                            values=self._target, aggfunc=np.sum, fill_value=0)
     agg_timeseries = data.sum(axis=0)
     geos = data.index
     n_geos = len(geos)

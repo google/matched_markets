@@ -220,6 +220,14 @@ class TBRDiagnosticsTest(unittest.TestCase):
     tbrdiag.fit(self.data, target=target)
     self.assertEqual(tbrdiag._diagnostics['noisy_geos'], [])
 
+    # Remove a single day for a single geo, this geo should NOT be detected.
+    data = self.data.copy()
+    data = data[~((data['geo'] == 1) & (data['date'] == '2018-01-02'))]
+    tbrdiag = tbrdiagnostics.TBRDiagnostics()
+    target = self.response
+    tbrdiag.fit(data, target=target)
+    self.assertEqual(tbrdiag._diagnostics['noisy_geos'], [])
+
     # Replace Geo #1 with noise, expect it to be detected.
     data = self.data.copy()
     n_days = sum(data.geo == 1)

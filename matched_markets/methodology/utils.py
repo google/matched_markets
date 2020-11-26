@@ -296,7 +296,7 @@ def plot_iroas_over_time(iroas_df: pd.DataFrame, experiment_dates: pd.DataFrame,
       clear='mouseout')
 
   iroas_lines = iroas_base.mark_line().encode(
-      y=alt.Y('mean:Q', axis=alt.Axis(title=' ', format='.1')))
+      y=alt.Y('mean:Q', axis=alt.Axis(title=' ', format='.3')))
 
   iroas_points = iroas_lines.mark_point().transform_filter(iroas_selection)
 
