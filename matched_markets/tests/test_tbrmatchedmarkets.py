@@ -161,6 +161,29 @@ class TBRMatchedMarketsTest(unittest.TestCase):
     mm = TBRMatchedMarkets(self.data, self.par)
     self.assertFalse(mm.geos_must_include)
 
+  def testNPretestMaxDefault(self):
+    """if n_pretest_max is not specified, all time points are used."""
+    self.assertTrue(
+        TBRMatchedMarkets(self.data, self.par).data.df.columns.equals(
+            self.data.df.columns))
+
+  def testNPretestMaxSpecified(self):
+    """if n_pretest_max is specified, a subset of time points is used."""
+    par = TBRMMDesignParameters(n_test=14, iroas=1.0, n_pretest_max=3)
+    self.assertTrue(
+        TBRMatchedMarkets(self.data, par).data.df.columns.equals(
+            pd.to_datetime(['2020-03-19', '2020-03-20', '2020-03-21'])))
+
+  def testMostRecentObservationsAreConsidered(self):
+    """if n_pretest_max is specified, we select the n_pretest_max most recent observations."""
+    # reverse the order of the time points
+    data = TBRMMData(
+        self.df.sort_values(by='date', ascending=False), self.response)
+    par = TBRMMDesignParameters(n_test=14, iroas=1.0, n_pretest_max=3)
+    self.assertTrue(
+        TBRMatchedMarkets(data, par).data.df.columns.equals(
+            pd.to_datetime(['2020-03-19', '2020-03-20', '2020-03-21'])))
+
 
 class GeosWithinConstraintsTest(TBRMatchedMarketsTest):
   """Test property 'geos_within_constraints'."""

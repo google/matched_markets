@@ -44,7 +44,7 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
     self.y_error_msg = 'y must be a one-dimensional vector'
     self.twodim_array = np.array([list(range(10)), list(range(10))])
     self.corr = np.corrcoef(x, y)[0, 1]
-    self.xy_short = (1, 2, 3, 4, 5)  # Minimum length = 6.
+    self.xy_short = (1, 2)  # Minimum length = 3.
 
   def testInit(self):
     """The object must be properly initialized."""
@@ -71,7 +71,7 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
 
   def testYPropertyLength(self):
     """The y property must satisfy a minimum length requirement."""
-    with self.assertRaisesRegex(ValueError, 'y must have length >= 6'):
+    with self.assertRaisesRegex(ValueError, 'y must have length >= 3'):
       TBRMMDiagnostics(self.xy_short, self.par)
 
   def testYPropertyNoneValue(self):
@@ -397,8 +397,8 @@ class AATestTest(TBRMMDiagnosticsTest):
     self.assertIsNone(diag.aatest)
 
   def testTooFewPretestDatapoints(self):
-    """test_ok is None if the number of time points is < 6 + n_test."""
-    n_pretest = 5
+    """test_ok is None if the number of time points is < 2 + n_test."""
+    n_pretest = 2
     n_test = 7
     y = list(range(n_pretest + n_test))
     x = y
@@ -601,10 +601,10 @@ class TestsOkTest(TBRMMDiagnosticsTest):
   def testAATestNoneImpliesNone(self):
     """If the A/A Test returns None, the result is None."""
     # A/A Test returns None if there are not enough time points.
-    x = np.array([181., 69., 74., 46., 143., -15., 187., 62., 116., 88., 173.])
+    x = np.array([181., 69., 74., 46., 143., -15., 187., 62.])
     y = x.copy()
     y[0] = y[0] + 1
-    y[10] = y[10] + 1
+    y[7] = y[7] + 1
     diag = TBRMMDiagnostics(y, self.par)
     diag.x = x
     self.assertTrue(diag.corr_test)

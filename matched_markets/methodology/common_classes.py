@@ -15,6 +15,7 @@
 
 """A few common classes to be used for the library."""
 
+import enum
 import dataclasses
 import pandas as pd
 
@@ -34,3 +35,10 @@ class TimeWindow:
     if self.first_day > self.last_day:
       raise ValueError('TimeWindow(): first_day > last_day: {!r}, {!r}'.format(
           self.first_day, self.last_day))
+
+
+class GeoAssignment(enum.IntEnum):
+  """Defines the values for Treatment/Control assignment."""
+  CONTROL = 2
+  TREATMENT = 1
+  EXCLUDED = -1

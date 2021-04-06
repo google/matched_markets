@@ -24,7 +24,7 @@ import dataclasses
 
 OptionalFloat = Optional[float]
 OptionalInt = Optional[int]
-OptionalRange = Optional[Tuple[float]]
+OptionalRange = Optional[Tuple[float, float]]
 
 
 @dataclasses.dataclass
@@ -32,7 +32,7 @@ class TBRMMDesignParameters:
   """User-supplied design parameters and constraints for the desired designs.
 
   Attributes:
-    n_test: An integer >= 7. Number of time points in the future geo
+    n_test: An integer >= 1. Number of time points in the future geo
       experiment. Required.
     iroas: A float >= 1.0 and <= 10.0. Assumed true target iROAS, with the given
       power_level (see the attribute below). Required.
@@ -63,9 +63,9 @@ class TBRMMDesignParameters:
     n_geos_max: An integer >= 2. (Optional) maximum number of geos to include in
       the search. If not specified, all available geos (that satisfy other
       constraints) will be included in the search.
-    n_pretest_max: An integer >= 14. Maximum number of pretest timepoints to
+    n_pretest_max: An integer >= 3. Maximum number of pretest timepoints to
       include in the time series for the purpose of estimating minimum
-      detectable response, correlation and other diagnostics. Default 14.
+      detectable response, correlation and other diagnostics. Default 90.
     n_designs: An integer >= 1. Maximum number of designs to store during the
       search. Default 1.
     rho_max: A float >= 0.9 and < 1.0. Maximum assumed treatment-control
@@ -84,8 +84,8 @@ class TBRMMDesignParameters:
   """
 
   _MIN_CORR = 0.8  # Lower bound for min_corr.
-  _N_TEST_MIN = 7  # Lower bound for n_test.
-  _N_PRETEST_MIN = 14  # Lower bound for n_pretest_min.
+  _N_TEST_MIN = 1  # Lower bound for n_test.
+  _N_PRETEST_MIN = 3  # Lower bound for n_pretest_min.
   _IROAS_RANGE = (1.0, 10.0)  # Acceptable range for iroas.
 
   _test_functions = {'>': operator.gt,
@@ -124,7 +124,7 @@ class TBRMMDesignParameters:
     self._test_value_vs_threshold('geo_ratio_tolerance', '>', 0.0)
 
     self._test_range(0.0, '<', ('treatment_share_range', '<'), '<', 1.0)
-    self._test_range(0.0, '<', ('budget_range', '<'), '<', float('inf'))
+    self._test_range(0.0, '<=', ('budget_range', '<'), '<', float('inf'))
     self._test_range(1, '<=', ('treatment_geos_range', '<='), '<', float('inf'))
     self._test_range(1, '<=', ('control_geos_range', '<='), '<', float('inf'))
 
@@ -137,6 +137,17 @@ class TBRMMDesignParameters:
     self._test_value_within_bounds(0.5, '<=', 'power_level', '<', 1.0)
     self._test_value_within_bounds(self._MIN_CORR, '<=', 'min_corr', '<', 1.0)
     self._test_value_within_bounds(0.9, '<=', 'flevel', '<', 1.0)
+
+  def __eq__(self, other: 'TBRMMDesignParameters'):
+    """Checks if two instances of TMDesignParameters are equal."""
+    if not isinstance(other, TBRMMDesignParameters):
+      raise NotImplementedError('Cannot compare instance of '
+                                'TBRMMDesignParameters '
+                                f'with instance of {type(other)}')
+    if self is other:
+      return True
+
+    return dataclasses.asdict(self) == dataclasses.asdict(other)
 
   def _is_optional(self, attr):
     """Check if a given attribute is optional or not.

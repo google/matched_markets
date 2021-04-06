@@ -201,6 +201,78 @@ class UtilsTest(unittest.TestCase):
                                              cooldown_date)
     self.assertIsInstance(iroas_chart, alt.LayerChart)
 
+  def testFindFrequency(self):
+    dates = list(pd.date_range(start='2020-01-01', end='2020-02-01', freq='D'))
+    geos = [1, 2, 3, 4]
+    df = pd.DataFrame({
+        'date': dates * len(geos),
+        'geo': sorted(geos * len(dates))
+    })
+
+    frequency = utils.infer_frequency(df, 'date', 'geo')
+    self.assertEqual(frequency, 'D')
+
+    weeks = list(pd.date_range(start='2020-01-01', end='2020-02-01', freq='W'))
+    df = pd.DataFrame({
+        'date': weeks * len(geos),
+        'geo': sorted(geos * len(weeks))
+    })
+
+    frequency = utils.infer_frequency(df, 'date', 'geo')
+    self.assertEqual(frequency, 'W')
+
+  def testDifferentFrequencies(self):
+    dates = list(pd.date_range(start='2020-01-01', end='2020-02-01', freq='D'))
+    weeks = list(pd.date_range(start='2020-01-01', end='2020-02-01', freq='W'))
+    geos = [1] * len(dates) + [2] * len(weeks)
+    df = pd.DataFrame({
+        'date': dates + weeks,
+        'geo': geos
+    })
+
+    with self.assertRaises(ValueError) as cm:
+      utils.infer_frequency(df, 'date', 'geo')
+    self.assertEqual(
+        str(cm.exception),
+        'The provided time series seem to have irregular frequencies.')
+
+  def testFindFrequencyDataNotSorted(self):
+    dates = list(pd.date_range(start='2020-01-01', end='2020-02-01', freq='D'))
+    geos = [1, 2, 3, 4]
+    df = pd.DataFrame({
+        'date': dates * len(geos),
+        'geo': sorted(geos * len(dates))
+    })
+    # permute the order of the rows, so that the dataset is not sorted by date
+    df = df.sample(frac=1, replace=False)
+    frequency = utils.infer_frequency(df, 'date', 'geo')
+    self.assertEqual(frequency, 'D')
+
+  def testInsufficientData(self):
+    dates = list(pd.date_range(start='2020-01-01', end='2020-01-01', freq='D'))
+    geos = [1, 2]
+    df = pd.DataFrame({
+        'date': dates * len(geos),
+        'geo': sorted(geos * len(dates))
+    })
+    with self.assertRaises(ValueError) as cm:
+      utils.infer_frequency(df, 'date', 'geo')
+    self.assertEqual(
+        str(cm.exception),
+        'At least one series with more than one observation must be provided.')
+
+  def testUnknownFrequency(self):
+    dates = list(pd.to_datetime(['2020-10-10', '2020-10-13', '2020-10-16']))
+    geos = [1, 2]
+    df = pd.DataFrame({
+        'date': dates * len(geos),
+        'geo': sorted(geos * len(dates))
+    })
+
+    with self.assertRaises(ValueError) as cm:
+      utils.infer_frequency(df, 'date', 'geo')
+    self.assertEqual(str(cm.exception),
+                     'Frequency could not be identified. Got 3 days.')
 
 if __name__ == '__main__':
   unittest.main()

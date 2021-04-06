@@ -41,6 +41,7 @@ class TBRMMDesignParametersTest(unittest.TestCase):
     super().setUp()
 
     self.default_args = {'n_test': 14, 'iroas': 1.0}  # Mandatory parameters.
+    self.par = TBRMMDesignParameters(n_test=14, iroas=1.0)
 
   def _testBadValue(self, value, message=None):  # pylint: disable=invalid-name
     """Raise an error if the value is out of the acceptable range."""
@@ -127,11 +128,34 @@ class DefaultsTest(TBRMMDesignParametersTest):
     self.assertEqual(par.rho_max, 0.995)
     self.assertEqual(par.flevel, 0.9)
 
+  def testSameInstance(self):
+    """Checks that an instance is equal to itself."""
+    par2 = self.par
+    self.assertEqual(self.par, par2)
+
+  def testEquality(self):
+    """Checks that two instances with same values are equal."""
+    par2 = TBRMMDesignParameters(n_test=14, iroas=1.0)
+    self.assertEqual(self.par, par2)
+
+  def testNotEqual(self):
+    """Checks that two instances with different values are not equal."""
+    par2 = TBRMMDesignParameters(n_test=28, iroas=1.0)
+    self.assertNotEqual(self.par, par2)
+
+  def testNotImplementedEquality(self):
+    """Raise error for equality of classes that cannot be compared."""
+    with self.assertRaisesRegex(NotImplementedError,
+                                r'Cannot compare instance of '
+                                'TBRMMDesignParameters'
+                                r' with instance of <class \'str\'>'):
+      self.par.__eq__('string')
+
 
 class NTestTest(TBRMMDesignParametersTest):
 
   name = 'n_test'
-  default_error_message = '{} must be >= 7'
+  default_error_message = '{} must be >= 1'
 
   def testValueNotInteger(self):
     self._testBadValue(7.1, '{} must be an integer')
@@ -140,7 +164,7 @@ class NTestTest(TBRMMDesignParametersTest):
     self._testValueNonNumeric()
 
   def testValueTooLow(self):
-    self._testBadValue(6)
+    self._testBadValue(0)
 
   def testValueOk(self):
     self._testValueOk(7)
@@ -242,7 +266,7 @@ class TreatmentShareRangeTest(TBRMMDesignParametersTest):
 class BudgetRangeTest(TBRMMDesignParametersTest):
 
   name = 'budget_range'
-  default_error_message = '{} must be > 0'
+  default_error_message = '{} must be >= 0'
 
   def testRangeStructure(self):
     self._testRangeStructure()
@@ -262,7 +286,6 @@ class BudgetRangeTest(TBRMMDesignParametersTest):
   def testValueTooLow(self):
     self._testBadValue((-1.0, -0.01))
     self._testBadValue((-0.01, 1.0))
-    self._testBadValue((0.0, 1.0))
 
   def testValueTooHigh(self):
     inf = float('inf')
@@ -366,7 +389,7 @@ class NGeosMaxTest(TBRMMDesignParametersTest):
 class NPretestMaxTest(TBRMMDesignParametersTest):
 
   name = 'n_pretest_max'
-  default_error_message = '{} must be >= 14'
+  default_error_message = '{} must be >= 3'
 
   def testValueNonNumeric(self):
     self._testValueNonNumeric()
@@ -383,7 +406,7 @@ class NPretestMaxTest(TBRMMDesignParametersTest):
   def testValueTooLow(self):
     self._testBadValue(-1)
     self._testBadValue(0)
-    self._testBadValue(13)
+    self._testBadValue(2)
 
 
 class NDesignsTest(TBRMMDesignParametersTest):

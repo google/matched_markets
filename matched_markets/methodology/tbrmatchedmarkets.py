@@ -65,7 +65,8 @@ class TBRMatchedMarkets:
       return TBRMMDiagnostics(y,
                               parameters).estimate_required_impact(
                                   parameters.rho_max)
-
+    # Consider only the most recent n_pretest_max time points
+    data.df = data.df.iloc[:, -parameters.n_pretest_max:]
     # Calculate the required impact estimates for each geo.
     geo_req_impact = data.df.apply(estimate_required_impact, axis=1)
 
@@ -569,7 +570,7 @@ class TBRMatchedMarkets:
           neighboring_control_group = group_ctl.symmetric_difference([geo])
           if (not neighboring_control_group) or (
               not self.design_within_constraints(group_star_trt[k],
-                                                 neighboring_control_group)):
+                                                 neighboring_control_group)):  # pytype: disable=wrong-arg-types
             continue
 
           neighbor_design = tbrmmdiagnostics.TBRMMDiagnostics(

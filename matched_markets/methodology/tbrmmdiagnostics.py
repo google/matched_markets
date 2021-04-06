@@ -108,7 +108,7 @@ class TBRMMDiagnostics:
       run.
   """
   # Minimum required number of timepoints in x, y.
-  _min_timepoints = 6
+  _min_timepoints = 3
   # Brownian Bridge bound multiplier for the TBR stability check.
   _bb_bound = 3.0
   # Durbin-Watson range of acceptable values.

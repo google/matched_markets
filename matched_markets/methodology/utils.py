@@ -22,6 +22,7 @@ import altair as alt
 from matched_markets.methodology import common_classes
 import numpy as np
 import pandas as pd
+from scipy import stats
 from pandas.api.types import is_numeric_dtype
 
 TimeWindow = common_classes.TimeWindow
@@ -331,3 +332,66 @@ def plot_iroas_over_time(iroas_df: pd.DataFrame, experiment_dates: pd.DataFrame,
                           cooldown_date_rule, iroas_ci_bands_rule)
 
   return iroas_chart
+
+
+def infer_frequency(data: pd.DataFrame, date_index: str,
+                    series_index: str) -> str:
+  """Infers frequency of data from pd.DataFrame with multiple indices.
+
+  Infers frequency of data from pd.DataFrame with two indices, one for the slice
+  name and one for the date-time.
+  Example:
+    df = pd.Dataframe{'date': [2020-10-10, 2020-10-11], 'geo': [1, 1],
+      'response': [10, 20]}
+    infer_frequency(df, 'date', 'geo')
+
+  Args:
+    data: a pd.DataFrame for which frequency needs to be inferred.
+    date_index: string containing the name of the time index.
+    series_index: string containing the name of the series index.
+
+  Returns:
+    A str, either 'D' or 'W' indicating the most likely frequency inferred
+    from the data.
+
+  Raises:
+    ValueError: if it is not possible to infer frequency of sampling from the
+      provided pd.DataFrame.
+  """
+  data = data.copy().set_index([series_index, date_index])
+  data = data.sort_values(by=[date_index, series_index])
+  # Infer most likely frequence for each series_index
+  series_names = data.index.get_level_values(series_index).unique().tolist()
+  series_frequencies = []
+  for series in series_names:
+    observed_times = data.iloc[data.index.get_level_values(series_index) ==
+                               series].index.get_level_values(date_index)
+    n_steps = len(observed_times)
+
+    if n_steps > 1:
+      time_diffs = (
+          observed_times[1:n_steps] -
+          observed_times[0:(n_steps - 1)]).astype('timedelta64[D]').array
+
+      modal_frequency = stats.mode(time_diffs)
+
+      series_frequencies.append(modal_frequency.mode[0])
+
+  if not series_frequencies:
+    raise ValueError(
+        'At least one series with more than one observation must be provided.')
+
+  if series_frequencies.count(series_frequencies[0]) != len(series_frequencies):
+    raise ValueError(
+        'The provided time series seem to have irregular frequencies.')
+
+  try:
+    frequency = {
+        1: 'D',
+        7: 'W'
+    }[series_frequencies[0]]
+  except KeyError:
+    raise ValueError('Frequency could not be identified. Got %d days.' %
+                     series_frequencies[0])
+
+  return frequency
