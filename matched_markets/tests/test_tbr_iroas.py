@@ -161,6 +161,70 @@ class TBRiROASTest(unittest.TestCase):
     self.assertLess(order_icost, -2)
     self.assertLess(order_probability, -2)
 
+  def testVariableCostIROASSummaryTwoTails(self, seed=1234):
+
+    # Make behaviour deterministic.
+    np.random.seed(seed=seed)
+
+    # Fully set up a TBR object.
+    iroas_model = tbr_iroas.TBRiROAS(use_cooldown=False)
+    data = copy.copy(self.data)
+    data.cost += 0.00001*np.random.normal(size=data.shape[0])
+
+    iroas_model.fit(data,
+                    key_response=self.key_response,
+                    key_cost=self.key_cost,
+                    key_group=self.key_group,
+                    key_period=self.key_period,
+                    key_date=self.key_date)
+
+    # Arguments for the type of tests to conduct.
+    level = 0.9
+    posterior_threshold = 0.0
+    tails = 2
+
+    # Summary values from R, treated as constants.
+    # pylint: disable=invalid-name
+    R_ESTIMATE = 2.947012
+    R_PRECISION = 0.1557932
+    R_LOWER = 2.79135
+    R_UPPER = 3.102936
+    R_INCR_RESP = 147337.122
+    R_INCR_COST = 50000
+    R_PROBABILITY = 1.0
+    # pylint: enable=invalid-name
+
+    # Summary values from python.
+    iroas = iroas_model.summary(
+        level=level, posterior_threshold=posterior_threshold, tails=tails)
+    py_estimate = iroas['estimate'].iloc[0]
+    py_precision = iroas['precision'].iloc[0]
+    py_lower = iroas['lower'].iloc[0]
+    py_upper = iroas['upper'].iloc[0]
+    py_incr_resp = iroas['incremental_response'].iloc[0]
+    py_incr_cost = iroas['incremental_cost'].iloc[0]
+    py_probability = iroas['probability'].iloc[0]
+
+    # Must do it like this as the R value is given with lower number of dps.
+    order_estimate = utils.float_order(R_ESTIMATE - py_estimate)
+    order_precision = utils.float_order(R_PRECISION - py_precision)
+    order_lower = utils.float_order(R_LOWER - py_lower)
+    order_upper = utils.float_order(R_UPPER - py_upper)
+    order_iresp = utils.float_order(R_INCR_RESP - py_incr_resp)
+    order_icost = utils.float_order(R_INCR_COST - py_incr_cost)
+    order_probability = utils.float_order(R_PROBABILITY - py_probability)
+
+    # Conduct the tests. Easier threshold as we added some noise.
+    print(py_lower)
+    print(py_upper)
+    self.assertLess(order_estimate, -2)
+    self.assertLess(order_precision, -2)
+    self.assertLess(order_lower, -2)
+    self.assertLess(order_upper, -2)
+    self.assertLess(order_iresp, -2)  # incremental_response is a larger number.
+    self.assertLess(order_icost, -2)
+    self.assertLess(order_probability, -2)
+
   def testIROASSummaryWithCooldown(self):
 
     # Fully set up a TBR object.

@@ -194,7 +194,7 @@ class TBRiROAS(object):
       if tails == 1:
         report['upper'] = np.inf
       else:
-        report['upper'] = np.percentile(sims_iroas, level)
+        report['upper'] = np.percentile(sims_iroas, 100 * (1 - alpha))
       report['probability'] = np.mean(sims_iroas > posterior_threshold)
       report['level'] = level
       report['posterior_threshold'] = posterior_threshold

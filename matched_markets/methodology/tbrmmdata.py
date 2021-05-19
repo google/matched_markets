@@ -146,7 +146,7 @@ class TBRMMData:
       geo_assignments = geo_eligibility.get_eligible_assignments()
 
     assignable = geo_assignments.all - geo_assignments.x_fixed
-    self.assignable = assignable
+    self.assignable = assignable  # pytype: disable=annotation-type-mismatch
     self.geo_eligibility = geo_eligibility
 
   @property

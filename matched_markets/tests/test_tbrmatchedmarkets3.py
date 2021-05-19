@@ -280,6 +280,110 @@ class GreedySearch(unittest.TestCase):
     self.assertEqual(designs[0].score.score.corr, round(designs[0].diag.corr,
                                                         2))
 
+  def testGreedySearchTreatmentSizeRange(self):
+    """Search succeed with constrained treatment group size."""
+    # limit the search to treatment groups of size 2
+    self.par.treatment_geos_range = (2, 2)
+    mm = TBRMatchedMarkets(self.data, self.par)
+    designs = mm.greedy_search()
+    diag = TBRMMDiagnostics(
+        self.data.aggregate_time_series(set([0, 2])), self.par)
+    diag.x = self.data.aggregate_time_series(set([1]))
+    corr = diag.corr
+    required_impact = diag.estimate_required_impact(corr)
+    self.assertTrue(len(designs) == 1)  # pylint: disable=g-generic-assert
+    self.assertSetEqual(designs[0].treatment_geos, {'1', '3'})
+    self.assertSetEqual(designs[0].control_geos, {'2'})
+    self.assertTupleEqual(designs[0].score.score,
+                          (1, 1, 1, 1, round(corr, 2), 1 / required_impact))
+    self.assertEqual(designs[0].score.diag.corr, designs[0].diag.corr)
+    self.assertEqual(designs[0].score.score.corr, round(designs[0].diag.corr,
+                                                        2))
+
+  def testGreedySearchControlSizeRange(self):
+    """Search succeed with constrained treatment group size."""
+    # limit the search to control groups of size 2
+    self.par.control_geos_range = (2, 2)
+    mm = TBRMatchedMarkets(self.data, self.par)
+    designs = mm.greedy_search()
+    diag = TBRMMDiagnostics(
+        self.data.aggregate_time_series(set([0])), self.par)
+    diag.x = self.data.aggregate_time_series(set([1, 2]))
+    corr = diag.corr
+    required_impact = diag.estimate_required_impact(corr)
+    self.assertTrue(len(designs) == 1)  # pylint: disable=g-generic-assert
+    self.assertSetEqual(designs[0].treatment_geos, {'1'})
+    self.assertSetEqual(designs[0].control_geos, {'2', '3'})
+    self.assertTupleEqual(designs[0].score.score,
+                          (1, 1, 1, 1, round(corr, 2), 1 / required_impact))
+    self.assertEqual(designs[0].score.diag.corr, designs[0].diag.corr)
+    self.assertEqual(designs[0].score.score.corr, round(designs[0].diag.corr,
+                                                        2))
+
+  def testGreedySearchTreatmentGeoShare(self):
+    """Search succeed with constrained treatment group revenue share."""
+    # limit the search to treatment groups with a revenue share >0.65
+    # note that the largest single geos only has a share of 0.635031, so we
+    # need at least two geos in treatment
+    self.par.treatment_share_range = (0.65, 0.99)
+    mm = TBRMatchedMarkets(self.data, self.par)
+    designs = mm.greedy_search()
+    diag = TBRMMDiagnostics(
+        self.data.aggregate_time_series(set([0, 2])), self.par)
+    diag.x = self.data.aggregate_time_series(set([1]))
+    corr = diag.corr
+    required_impact = diag.estimate_required_impact(corr)
+    self.assertTrue(len(designs) == 1)  # pylint: disable=g-generic-assert
+    self.assertSetEqual(designs[0].treatment_geos, {'1', '3'})
+    self.assertSetEqual(designs[0].control_geos, {'2'})
+    self.assertTupleEqual(designs[0].score.score,
+                          (1, 1, 1, 1, round(corr, 2), 1 / required_impact))
+    self.assertEqual(designs[0].score.diag.corr, designs[0].diag.corr)
+    self.assertEqual(designs[0].score.score.corr, round(designs[0].diag.corr,
+                                                        2))
+
+  def testGreedySearchVolumeRatioTolerance(self):
+    """Search succeed with constrained volume ratio tolerance."""
+    # limit the search to groups with a volume ratio >0.5.
+    # note that the best design (Treatment=geo1, Control=geo2) has a ratio of
+    # 0.4909, so we need at least two geos in control
+    self.par.volume_ratio_tolerance = 1
+    mm = TBRMatchedMarkets(self.data, self.par)
+    designs = mm.greedy_search()
+    diag = TBRMMDiagnostics(self.data.aggregate_time_series(set([0])), self.par)
+    diag.x = self.data.aggregate_time_series(set([1, 2]))
+    corr = diag.corr
+    required_impact = diag.estimate_required_impact(corr)
+    self.assertTrue(len(designs) == 1)  # pylint: disable=g-generic-assert
+    self.assertSetEqual(designs[0].treatment_geos, {'1'})
+    self.assertSetEqual(designs[0].control_geos, {'2', '3'})
+    self.assertTupleEqual(designs[0].score.score,
+                          (1, 1, 1, 1, round(corr, 2), 1 / required_impact))
+    self.assertEqual(designs[0].score.diag.corr, designs[0].diag.corr)
+    self.assertEqual(designs[0].score.score.corr, round(designs[0].diag.corr,
+                                                        2))
+
+  def testGreedySearchGeoRatioTolerance(self):
+    """Search succeed with constrained geo ratio tolerance."""
+    # limit the search to groups with a geo ratio >0.52 and <1.9. The constraint
+    # would raise an error (division by zero) since the search starts with
+    # all geos in control and 0 geos in treatment
+    self.par.geo_ratio_tolerance = 0.9
+    mm = TBRMatchedMarkets(self.data, self.par)
+    designs = mm.greedy_search()
+    diag = TBRMMDiagnostics(self.data.aggregate_time_series(set([0])), self.par)
+    diag.x = self.data.aggregate_time_series(set([1]))
+    corr = diag.corr
+    required_impact = diag.estimate_required_impact(corr)
+    self.assertTrue(len(designs) == 1)  # pylint: disable=g-generic-assert
+    self.assertSetEqual(designs[0].treatment_geos, {'1'})
+    self.assertSetEqual(designs[0].control_geos, {'2'})
+    self.assertTupleEqual(designs[0].score.score,
+                          (1, 1, 1, 1, round(corr, 2), 1 / required_impact))
+    self.assertEqual(designs[0].score.diag.corr, designs[0].diag.corr)
+    self.assertEqual(designs[0].score.score.corr, round(designs[0].diag.corr,
+                                                        2))
+
 
 if __name__ == '__main__':
   unittest.main()

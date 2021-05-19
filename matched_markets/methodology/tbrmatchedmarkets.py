@@ -459,8 +459,8 @@ class TBRMatchedMarkets:
     """
     if self.parameters.volume_ratio_tolerance is not None:
       volume_ratio = (
-          self.data.aggregate_geo_share(treatment_geos) /
-          self.data.aggregate_geo_share(control_geos))
+          self.data.aggregate_geo_share(control_geos)/
+          self.data.aggregate_geo_share(treatment_geos))
       if self._constraint_not_satisfied(
           volume_ratio, 1 / (1 + self.parameters.volume_ratio_tolerance),
           1 + self.parameters.volume_ratio_tolerance):
@@ -526,8 +526,17 @@ class TBRMatchedMarkets:
       n_remaining = len(self.geo_assignments.all) - n_treatment
       if n_remaining == 0:
         max_treatment_size = n_treatment - 1
+      self.parameters.treatment_geos_range = (1, max_treatment_size)
     else:
       max_treatment_size = self.parameters.treatment_geos_range[1]
+
+    if self.parameters.control_geos_range is None:
+      n_control = len(self.geo_assignments.c)
+      max_control_size = n_control
+      n_remaining = len(self.geo_assignments.all) - n_control
+      if n_remaining == 0:
+        max_control_size = n_control - 1
+      self.parameters.control_geos_range = (1, max_control_size)
 
     kappa_0 = len(self.geo_assignments.t_fixed)
     group_star_trt = {kappa_0: self.geo_assignments.t_fixed}
@@ -568,10 +577,18 @@ class TBRMatchedMarkets:
         group_ctl_tmp = group_ctl
         for geo in reassignable_geos:
           neighboring_control_group = group_ctl.symmetric_difference([geo])
-          if (not neighboring_control_group) or (
-              not self.design_within_constraints(group_star_trt[k],
-                                                 neighboring_control_group)):  # pytype: disable=wrong-arg-types
-            continue
+          # we skip checking constraints for designs with less than the minimum
+          # number of treatment geos, or above the maximum number of control
+          # geos. Otherwise, we will never be able to augment the size of
+          # treatment (to reach a size which would pass the checks) or decrease
+          # the size of control
+          if (k >= self.parameters.treatment_geos_range[0]) and (
+              len(neighboring_control_group) <=
+              self.parameters.control_geos_range[1]):
+            if (not neighboring_control_group) or (
+                not self.design_within_constraints(group_star_trt[k],
+                                                   neighboring_control_group)):  # pytype: disable=wrong-arg-types
+              continue
 
           neighbor_design = tbrmmdiagnostics.TBRMMDiagnostics(
               treatment_time_series, self.parameters)
@@ -603,9 +620,14 @@ class TBRMatchedMarkets:
         for geo in r_treatment:
           augmented_treatment_group = group_star_trt[k].union([geo])
           updated_control_group = group_star_ctl[k] - set([geo])
-          if (not updated_control_group) or (not self.design_within_constraints(
-              augmented_treatment_group, updated_control_group)):
-            continue
+          # see comment on lines 566-567 for the same if statement
+          if (k >= self.parameters.treatment_geos_range[0])  and (
+              len(neighboring_control_group) <=
+              self.parameters.control_geos_range[1]):
+            if (not updated_control_group) or (
+                not self.design_within_constraints(augmented_treatment_group,
+                                                   updated_control_group)):
+              continue
           treatment_time_series = self.data.aggregate_time_series(
               augmented_treatment_group)
           neighbor_design = TBRMMDiagnostics(
@@ -649,14 +671,15 @@ class TBRMatchedMarkets:
     group_star_ctl.pop(0, None)
     score_star.pop(0, None)
     for k in group_star_trt:
-      design_diag = TBRMMDiagnostics(
-          self.data.aggregate_time_series(group_star_trt[k]), self.parameters)
-      design_diag.x = self.data.aggregate_time_series(group_star_ctl[k])
-      design_score = TBRMMScore(design_diag)
-      design = TBRMMDesign(
-          design_score, group_star_trt[k], group_star_ctl[k],
-          copy.deepcopy(design_diag))
-      results.push(0, design)
+      if self.design_within_constraints(group_star_trt[k], group_star_ctl[k]):
+        design_diag = TBRMMDiagnostics(
+            self.data.aggregate_time_series(group_star_trt[k]), self.parameters)
+        design_diag.x = self.data.aggregate_time_series(group_star_ctl[k])
+        design_score = TBRMMScore(design_diag)
+        design = TBRMMDesign(
+            design_score, group_star_trt[k], group_star_ctl[k],
+            copy.deepcopy(design_diag))
+        results.push(0, design)
 
     self._search_results = results
     return self.search_results()
