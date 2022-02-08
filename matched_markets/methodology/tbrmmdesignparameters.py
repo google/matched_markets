@@ -34,7 +34,7 @@ class TBRMMDesignParameters:
   Attributes:
     n_test: An integer >= 1. Number of time points in the future geo
       experiment. Required.
-    iroas: A float >= 1.0 and <= 10.0. Assumed true target iROAS, with the given
+    iroas: A float >= 0.0. Assumed true target iROAS, with the given
       power_level (see the attribute below). Required.
     volume_ratio_tolerance: A float > 0. (Optional) constraint on the ratio of
       the average control group and treatment group volumes.  The ratio is
@@ -72,9 +72,9 @@ class TBRMMDesignParameters:
       correlation to use for estimating the Minimum Detectable Response for a
       given treatment group. Default 0.995. The closer to 1, the less likely it
       is that larger geos will be excluded from the search.
-    sig_level: A float >= 0.8 and < 1.0. Significance level of the one-sided
+    sig_level: A float > 0.0 and < 1.0. Significance level of the one-sided
       interval.
-    power_level: A float >= 0.8 and < 1.0. Required statistical power. Default
+    power_level: A float > 0.0 and < 1.0. Required statistical power. Default
       0.8.
     min_corr: A float >= 0.8 and < 1.0. Minimum acceptable Pearson correlation
       between the treatment and control time series. A correlation less than
@@ -86,7 +86,7 @@ class TBRMMDesignParameters:
   _MIN_CORR = 0.8  # Lower bound for min_corr.
   _N_TEST_MIN = 1  # Lower bound for n_test.
   _N_PRETEST_MIN = 3  # Lower bound for n_pretest_min.
-  _IROAS_RANGE = (1.0, 10.0)  # Acceptable range for iroas.
+  _MIN_IROAS = 0.0  # Minimum acceptable value for iroas.
 
   _test_functions = {'>': operator.gt,
                      '<': operator.lt,
@@ -117,8 +117,7 @@ class TBRMMDesignParameters:
     """
 
     self._test_value_vs_threshold('n_test', '>=', self._N_TEST_MIN)
-    iroas_min, iroas_max = self._IROAS_RANGE
-    self._test_value_within_bounds(iroas_min, '<=', 'iroas', '<=', iroas_max)
+    self._test_value_vs_threshold('iroas', '>=', self._MIN_IROAS)
 
     self._test_value_vs_threshold('volume_ratio_tolerance', '>', 0.0)
     self._test_value_vs_threshold('geo_ratio_tolerance', '>', 0.0)
@@ -133,8 +132,8 @@ class TBRMMDesignParameters:
     self._test_value_vs_threshold('n_designs', '>=', 1)
 
     self._test_value_within_bounds(0.9, '<=', 'rho_max', '<', 1.0)
-    self._test_value_within_bounds(0.8, '<=', 'sig_level', '<', 1.0)
-    self._test_value_within_bounds(0.5, '<=', 'power_level', '<', 1.0)
+    self._test_value_within_bounds(0.0, '<', 'sig_level', '<', 1.0)
+    self._test_value_within_bounds(0.0, '<', 'power_level', '<', 1.0)
     self._test_value_within_bounds(self._MIN_CORR, '<=', 'min_corr', '<', 1.0)
     self._test_value_within_bounds(0.9, '<=', 'flevel', '<', 1.0)
 

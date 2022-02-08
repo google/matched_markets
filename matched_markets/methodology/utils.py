@@ -22,7 +22,6 @@ import altair as alt
 from matched_markets.methodology import common_classes
 import numpy as np
 import pandas as pd
-from scipy import stats
 from pandas.api.types import is_numeric_dtype
 
 TimeWindow = common_classes.TimeWindow
@@ -373,9 +372,9 @@ def infer_frequency(data: pd.DataFrame, date_index: str,
           observed_times[1:n_steps] -
           observed_times[0:(n_steps - 1)]).astype('timedelta64[D]').array
 
-      modal_frequency = stats.mode(time_diffs)
+      min_frequency = np.min(time_diffs)
 
-      series_frequencies.append(modal_frequency.mode[0])
+      series_frequencies.append(min_frequency)
 
   if not series_frequencies:
     raise ValueError(

@@ -15,6 +15,7 @@
 """Time Based Regression geoexperiment methodology for iROAS.
 """
 
+from matched_markets.methodology import common_classes
 from matched_markets.methodology import semantics
 from matched_markets.methodology import utils
 from matched_markets.methodology.tbr import TBR
@@ -115,7 +116,12 @@ class TBRiROAS(object):
     tot_costs_order = utils.float_order(tot_costs)
     return tot_costs_order < -10
 
-  def summary(self, level=0.9, posterior_threshold=0.0, tails=1, nsims=10000):
+  def summary(self,
+              level=0.9,
+              posterior_threshold=0.0,
+              tails=1,
+              nsims=10000,
+              random_state=None):
     """Estimates the control-treatment relationship in the pre- period.
 
     Args:
@@ -125,6 +131,7 @@ class TBRiROAS(object):
       tails: `int` in {1,2}. Specifies number of tails to use in tests.
       nsims: `int`. In the case of variable costs, this is the number of
         simulations to use.
+      random_state: the random_state for the RNG to fix simulation results.
 
     Returns:
       `pd.DataFrame`, a summary at level, with alpha=1-level, containing:
@@ -177,8 +184,8 @@ class TBRiROAS(object):
           time=-1)
 
       # Simulate the iROAS
-      sims_cost = delta_cost.rvs(nsims)
-      sims_response = delta_response.rvs(nsims)
+      sims_cost = delta_cost.rvs(nsims, random_state=random_state)
+      sims_response = delta_response.rvs(nsims, random_state=random_state)
       sims_iroas = sims_response / sims_cost
 
       # This needs to be used twice.
@@ -203,3 +210,158 @@ class TBRiROAS(object):
       report['scenario'] = 'variable'
 
       return report
+
+  def estimate_pointwise_and_cumulative_effect(
+      self,
+      metric: str,
+      level: float = 0.9,
+      tails: int = 1
+  ) -> common_classes.TimeSeries:
+    """Estimates the pointwise and cumulative effect.
+
+    This function estimates the pointwise and cumulative effect on a metric
+    with confidence intervals.
+
+    If the cost is fixed as defined in _is_fixed_cost_scenario(), then the
+    counterfactual cost would be 0, and the pointwise difference is equal to the
+    observed cost.
+
+    Example usage:
+      iroas_model = tbr_iroas.TBRiROAS(use_cooldown=True)
+      iroas_model.fit(data)
+      iroas_model.estimate_pointwise_and_cumulative_effect(
+        metric='tbr_response')
+
+    Args:
+      metric: variable for which we want to compute the pointwise and cumulative
+        effect. It should be one of tbr_response or tbr_cost.
+      level: `float` in (0,1). Determines width of CIs.
+      tails: `int` in {1,2}. Specifies number of tails to use in tests.
+
+    Returns:
+      counterfactual_df: a time series with the counterfactual estimate of the
+        metric and its pointwise confidence bounds.
+        The dataframe has columns (date, estimate, lower, upper).
+      pointwise_difference_df: a time series with the pointwise difference
+        between observed and counterfactual metric, with confidence interval
+        bounds. The dataframe has columns (date, estimate, lower, upper).
+      cumulative_effect_df: a time series with the cumulative difference between
+        observed and counterfactual metric, with confidence interval bounds.
+        The dataframe has columns (date, estimate, lower, upper).
+    Raises:
+      ValueError:
+        - if tails is not 1 or 2.
+        - if the metric is not one of [tbr_response, tbr_cost].
+        - if fit was not called previously.
+        - if fit was called with use_cooldown=False.
+    """
+    if tails not in (1, 2):
+      raise ValueError('tails must be 1 or 2.')
+
+    if self.periods is None:
+      raise ValueError('The method "fit()" has not been called.')
+
+    if not self.use_cooldown:
+      raise ValueError('The method "fit()" must have been called with ' +
+                       'use_cooldown=True.')
+
+    if metric == 'tbr_response':
+      metric_df = self.tbr_response
+      metric_col = self.df_names.response
+    elif metric == 'tbr_cost':
+      metric_df = self.tbr_cost
+      metric_col = self.df_names.cost
+    else:
+      raise ValueError('The metric must be one of tbr_response or tbr_cost, ' +
+                       f'got {metric}')
+
+    periods = (self.periods.pre, self.periods.test, self.periods.cooldown)
+    alpha = (1 - level) / tails
+
+    metric_data = metric_df.analysis_data.copy().reset_index()
+
+    dates = metric_data.loc[metric_data['period'].isin(periods),
+                            'date'].unique()
+    experiment_dates = metric_data.loc[
+        metric_data['period'].isin([self.periods.test, self.periods.cooldown]),
+        'date'].unique()
+
+    if self._is_fixed_cost_scenario() and metric == 'tbr_cost':
+      tmp_data = metric_data[metric_data[self.df_names.group] ==
+                             self.groups.treatment].reset_index(drop=True)
+      counterfactual_df = common_classes.EstimatedTimeSeriesWithConfidenceInterval(
+          {
+              'date': dates,
+              'lower': 0,
+              'upper': 0,
+              'estimate': 0,
+          })
+      pointwise_difference_df = common_classes.EstimatedTimeSeriesWithConfidenceInterval(
+          {
+              'date': dates,
+              'lower': tmp_data['cost'],
+              'upper': tmp_data['cost'],
+              'estimate': tmp_data['cost'],
+          })
+
+      cumulative_effect = np.cumsum(
+          tmp_data.loc[tmp_data['date'].isin(experiment_dates), 'cost'])
+      cumulative_effect_df = common_classes.EstimatedTimeSeriesWithConfidenceInterval(
+          {
+              'date': experiment_dates,
+              'lower': cumulative_effect,
+              'upper': cumulative_effect,
+              'estimate': cumulative_effect,
+          })
+
+    else:
+      test_start_date = experiment_dates.min()
+      cooldown_end_date = experiment_dates.max()
+
+      delta_metric = metric_df.causal_cumulative_distribution()
+      pointwise_difference = metric_df.causal_effect(
+          periods).reset_index().rename(columns={0: 'metric'})
+      lower = np.diff(delta_metric.ppf(alpha), prepend=0)
+      lower = np.concatenate((pointwise_difference.loc[
+          pointwise_difference['date'] < test_start_date,
+          'metric'].values, lower))
+      upper = np.diff(delta_metric.ppf(1 - alpha), prepend=0)
+      upper = np.concatenate((pointwise_difference.loc[
+          pointwise_difference['date'] < test_start_date,
+          'metric'].values, upper))
+      # Get the test- period data in the form needed for regression.
+      treat_vec = metric_data.loc[
+          metric_data[self.df_names.group] == self.groups.treatment,
+          metric_col].reset_index(drop=True)
+
+      counterfactual_df = common_classes.EstimatedTimeSeriesWithConfidenceInterval(
+          {
+              'date': dates,
+              'lower': treat_vec - upper,
+              'upper': treat_vec - lower,
+              'estimate': treat_vec - pointwise_difference['metric']
+          })
+      pointwise_difference_df = common_classes.EstimatedTimeSeriesWithConfidenceInterval(
+          {
+              'date': dates,
+              'lower': lower,
+              'upper': upper,
+              'estimate': pointwise_difference['metric']
+          })
+
+      cumulative_effect = np.cumsum(
+          metric_df.causal_effect(periods)).reset_index().rename(
+              columns={0: 'metric'})
+      cumulative_effect = cumulative_effect.loc[
+          cumulative_effect['date'].between(test_start_date, cooldown_end_date),
+          'metric']
+      cumulative_effect_df = common_classes.EstimatedTimeSeriesWithConfidenceInterval(
+          {
+              'date': experiment_dates,
+              'lower': delta_metric.ppf(alpha),
+              'upper': delta_metric.ppf(1 - alpha),
+              'estimate': cumulative_effect
+          })
+
+    return common_classes.TimeSeries(counterfactual_df, pointwise_difference_df,
+                                     cumulative_effect_df)

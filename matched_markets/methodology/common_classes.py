@@ -15,8 +15,10 @@
 
 """A few common classes to be used for the library."""
 
-import enum
 import dataclasses
+import enum
+
+import numpy as np
 import pandas as pd
 
 
@@ -42,3 +44,31 @@ class GeoAssignment(enum.IntEnum):
   CONTROL = 2
   TREATMENT = 1
   EXCLUDED = -1
+
+
+class ExperimentPeriod(enum.IntEnum):
+  """Defines the values for Pre-Experiment, Experiment and Post-Experiment."""
+  PRE_EXPERIMENT = 0
+  EXPERIMENT = 1
+  POST_EXPERIMENT = 2
+
+
+class EstimatedTimeSeriesWithConfidenceInterval(pd.DataFrame):
+  """Defines an estimate time series with pointwise confidence intervals."""
+
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+    if not {'date', 'estimate', 'lower', 'upper'}.issubset(self.columns):
+      raise KeyError('The time series must contain the columns "date", ' +
+                     '"estimate", "lower", "upper".')
+    if np.any(self['lower'] > self['estimate']):
+      raise ValueError('lower bound is not smaller than point estimate.')
+    if np.any(self['upper'] < self['estimate']):
+      raise ValueError('upper bound is not larger than point estimate.')
+
+
+@dataclasses.dataclass
+class TimeSeries:
+  counterfactual: EstimatedTimeSeriesWithConfidenceInterval
+  pointwise_difference: EstimatedTimeSeriesWithConfidenceInterval
+  cumulative_effect: EstimatedTimeSeriesWithConfidenceInterval

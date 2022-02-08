@@ -17,7 +17,7 @@
 """
 import copy
 import itertools
-from typing import Generator, List, NewType, Set, TypeVar
+from typing import Generator, List, Set, Text, TypeVar
 
 from matched_markets.methodology import geoeligibility
 from matched_markets.methodology import heapdict
@@ -35,8 +35,8 @@ TBRMMDiagnostics = tbrmmdiagnostics.TBRMMDiagnostics
 TBRMMData = tbrmmdata.TBRMMData
 TBRMMDesign = tbrmmdesign.TBRMMDesign
 TBRMMScore = tbrmmscore.TBRMMScore
-GeoID = NewType('GeoID', str)
-GeoIndex = NewType('GeoIndex', int)
+GeoID = Text
+GeoIndex = int
 DictKey = TypeVar('DictKey', str, int, float)
 
 

@@ -176,19 +176,17 @@ class NTestTest(TBRMMDesignParametersTest):
 class IroasTest(TBRMMDesignParametersTest):
 
   name = 'iroas'
-  default_error_message = r'{} must be >= 1\.0 and <= 10\.0'
+  default_error_message = r'{} must be >= 0\.0'
 
   def testValueNonNumeric(self):
     self._testValueNonNumeric()
 
   def testValueTooLow(self):
-    self._testBadValue(0.99)
-
-  def testValueTooHigh(self):
-    self._testBadValue(10.01)
+    self._testBadValue(-0.99)
 
   def testValueOk(self):
     self._testValueOk(3.0)
+    self._testValueOk(0.0)
 
   def testValueNone(self):
     self._testBadValue(None)
@@ -434,13 +432,13 @@ class NDesignsTest(TBRMMDesignParametersTest):
 class SigLevelTest(TBRMMDesignParametersTest):
 
   name = 'sig_level'
-  default_error_message = r'{} must be >= 0\.8 and < 1\.0'
+  default_error_message = r'{} must be > 0\.0 and < 1\.0'
 
   def testValueNonNumeric(self):
     self._testValueNonNumeric()
 
   def testValueOk(self):
-    self._testValueOk(0.8)
+    self._testValueOk(0.01)
     self._testValueOk(0.99)
 
   def testValueNoneNotOk(self):
@@ -448,27 +446,27 @@ class SigLevelTest(TBRMMDesignParametersTest):
 
   def testValueTooLow(self):
     self._testBadValue(-1)
-    self._testBadValue(0)
+    self._testBadValue(0.0)
 
 
 class PowerLevelTest(TBRMMDesignParametersTest):
 
   name = 'power_level'
-  default_error_message = r'{} must be >= 0\.5 and < 1\.0'
+  default_error_message = r'{} must be > 0\.0 and < 1\.0'
 
   def testValueNonNumeric(self):
     self._testValueNonNumeric()
 
   def testValueOk(self):
-    self._testValueOk(0.5)
+    self._testValueOk(0.01)
     self._testValueOk(0.99)
 
   def testValueNoneNotOk(self):
     self._testBadValue(None)
 
   def testValueTooLow(self):
-    self._testBadValue(0)
-    self._testBadValue(0.49)
+    self._testBadValue(0.0)
+    self._testBadValue(-0.1)
 
 
 class MinCorrTest(TBRMMDesignParametersTest):

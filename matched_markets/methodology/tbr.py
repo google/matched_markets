@@ -15,7 +15,7 @@
 """Time Based Regression geoexperiment methodology.
 """
 
-import collections
+import collections.abc
 import functools
 from matched_markets.methodology import semantics
 from matched_markets.methodology import utils
@@ -143,7 +143,7 @@ class TBR(object):
     """
 
     # Ensure we can iterate through periods.
-    if not isinstance(periods, collections.Iterable):
+    if not isinstance(periods, collections.abc.Iterable):
       period_itr = (periods,)
     else:
       if periods:

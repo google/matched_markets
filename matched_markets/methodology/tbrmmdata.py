@@ -70,7 +70,7 @@ class TBRMMData:
   geos_in_data: Set[GeoID] = None
   assignable: Set[GeoID] = None
   geo_assignments: GeoAssignments = None
-  _geo_index: List[GeoRef] = None  # Storage for 'geo_index'.
+  _geo_index: OrderedGeos = None  # Storage for 'geo_index'.
   _array: Optional[Array] = None  # Time series of the geos by geo_index.
   _array_geo_share: Optional[Array] = None  # Subset of geo_share[geo_index].
 
