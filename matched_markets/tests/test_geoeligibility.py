@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-
 """Test the GeoEligibility class.
 """
 from matched_markets.methodology import geoeligibility

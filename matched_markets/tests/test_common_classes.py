@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-
 """Tests for common_classes."""
 
 from matched_markets.methodology import common_classes
