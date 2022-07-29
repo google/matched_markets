@@ -302,7 +302,10 @@ class TBRMMDiagnostics:
       return None
     elif self._pretestfit is None:
       y = self._y
-      b, a, *_ = stats.linregress(x, y)
+      try:
+        b, a, *_ = stats.linregress(x, y)
+      except ValueError:
+        b, a = np.nan, np.nan
       resid = y - a - b * x
       sigma = np.std(resid, ddof=2)
       self._pretestfit = LinregResult(a, b, sigma, resid)

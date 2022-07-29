@@ -620,8 +620,8 @@ class TBRMatchedMarkets:
           augmented_treatment_group = group_star_trt[k].union([geo])
           updated_control_group = group_star_ctl[k] - set([geo])
           # see comment on lines 566-567 for the same if statement
-          if (k >= self.parameters.treatment_geos_range[0])  and (
-              len(neighboring_control_group) <=
+          if (k >= self.parameters.treatment_geos_range[0]) and (
+              len(updated_control_group) <=
               self.parameters.control_geos_range[1]):
             if (not updated_control_group) or (
                 not self.design_within_constraints(augmented_treatment_group,
