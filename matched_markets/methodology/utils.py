@@ -201,7 +201,8 @@ def expand_time_windows(periods: List[TimeWindow]) -> List[pd.Timestamp]:
   """
   days_exclude = []
   for window in periods:
-    days_exclude += pd.date_range(window.first_day, window.last_day, freq='D')
+    days_exclude += pd.date_range(
+        window.first_day, window.last_day, freq='D').to_list()
 
   return list(set(days_exclude))
 

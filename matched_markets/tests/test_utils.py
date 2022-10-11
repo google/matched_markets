@@ -142,7 +142,8 @@ class UtilsTest(unittest.TestCase):
         pd.Timestamp('2020-10-10', freq='D'),
         pd.Timestamp('2020-08-10', freq='D'),
     ]
-    expected += pd.date_range(start='2020-11-10', end='2020-12-10', freq='D')
+    expected += pd.date_range(
+        start='2020-11-10', end='2020-12-10', freq='D').to_list()
     self.assertEqual(len(periods), len(expected))
     for x in periods:
       self.assertIn(x, expected)

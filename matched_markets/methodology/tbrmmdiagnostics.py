@@ -329,7 +329,7 @@ class TBRMMDiagnostics:
       return None
 
     if self._bbtest is None:
-      a, _, sigma, resid = self.pretestfit
+      a, _, sigma, resid = self.pretestfit  # pytype: disable=attribute-error  # strict-namedtuple-checks
       # Failure to fit the regression implies failure of the test.
       if np.isnan(a):
         self._bbtest = BBTestResult(False, None, None)
@@ -434,7 +434,7 @@ class TBRMMDiagnostics:
     diag.x = x[:-n_test]
     yt = y[-n_test:].mean()
     xt = x[-n_test:].mean()
-    estimate, cihw, sigma, _ = diag.tbrfit(xt, yt)
+    estimate, cihw, sigma, _ = diag.tbrfit(xt, yt)  # pytype: disable=attribute-error  # strict-namedtuple-checks
     bounds = (estimate - cihw, estimate + cihw)
     lower, upper = bounds
     if lower * upper < 0:

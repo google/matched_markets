@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 
-class TBRiROAS(object):
+class TBRiROAS():
   """Time Based Regression geoexperiment methodology.
 
   This class estimates the incremental Return on Ad Spend (iROAS)
@@ -138,7 +138,7 @@ class TBRiROAS(object):
       - estimate. The median estimate of iROAS.
       - precision. Distance between the (1-level)/tails and 0.5 quantiles.
       - lower. The value of the (1-level)/tails quantile.
-      - upper. If tails=2, the level/tails quantile, otherwise inf.
+      - upper. If tails=2, the 1 - 0.5 * (1 - level) quantile, otherwise inf.
       - probability. The probability that Delta > posterior_threshold.
       - level. Records the level parameter used to generate the report.
       - posterior_threshold. Records the posterior_threshold parameter.
@@ -158,6 +158,28 @@ class TBRiROAS(object):
     else:
       periods = (self.periods.test,)
 
+    tail_probability = (1 - level) / tails
+
+    response_data = self.tbr_response.analysis_data.copy().reset_index()
+    observed_treatment_response = response_data.loc[
+        (response_data[self.df_names.group] == self.groups.treatment) &
+        (response_data['period'].isin(periods)), self.df_names.response].sum()
+
+    # Obtain the distributions of the causal effects on response
+    delta_response = self.tbr_response.causal_cumulative_distribution(time=-1)
+    # Simulate the incremental response and relative lift
+    sims_response = delta_response.rvs(nsims, random_state=random_state)
+    sims_relative_lift = sims_response / (
+        observed_treatment_response - sims_response)
+    relative_lift = np.median(sims_relative_lift)
+    relative_lift_lower = np.percentile(sims_relative_lift,
+                                        100 * tail_probability)
+    if tails == 1:
+      relative_lift_upper = np.inf
+    else:
+      relative_lift_upper = np.percentile(sims_relative_lift,
+                                          100 * (1.0 - tail_probability))
+
     # iROAS analysis assuming fixed costs.
     if self._is_fixed_cost_scenario():
       cost = np.sum(self.tbr_cost.causal_effect(periods))
@@ -168,16 +190,19 @@ class TBRiROAS(object):
       report['incremental_cost'] = cost
       causal_effect = self.tbr_response.causal_effect(periods)
       report['incremental_response'] = np.sum(causal_effect)
+      report['incremental_response_lower'] = report['lower'] * cost
+      report['incremental_response_upper'] = report['upper'] * cost
+      report['relative_lift'] = relative_lift
+      report['relative_lift_lower'] = relative_lift_lower
+      report['relative_lift_upper'] = relative_lift_upper
       report['scenario'] = 'fixed'
       # Return the report, less the scale column.
       return report.drop('scale', axis=1)
 
     # iROAS analysis with variable costs modelled via TBR.
     else:
-      alpha = (1 - level)/tails
 
-      # Obtain the distributions of the two sets of causal effects
-      delta_response = self.tbr_response.causal_cumulative_distribution(time=-1)
+      # Obtain the distributions of the causal effects on cost
       # We know that causal costs only arose during the test period.
       delta_cost = self.tbr_cost.causal_cumulative_distribution(
           periods=(self.periods.test,),
@@ -185,11 +210,9 @@ class TBRiROAS(object):
 
       # Simulate the iROAS
       sims_cost = delta_cost.rvs(nsims, random_state=random_state)
-      sims_response = delta_response.rvs(nsims, random_state=random_state)
       sims_iroas = sims_response / sims_cost
 
-      # This needs to be used twice.
-      ci_lower = np.percentile(sims_iroas, 100 * alpha)
+      ci_lower = np.percentile(sims_iroas, 100 * tail_probability)
 
       # Construct the report.
       causal_effect = self.tbr_cost.causal_effect(periods)
@@ -200,13 +223,22 @@ class TBRiROAS(object):
       report['lower'] = ci_lower
       if tails == 1:
         report['upper'] = np.inf
+        report['incremental_response_upper'] = np.inf
       else:
-        report['upper'] = np.percentile(sims_iroas, 100 * (1 - alpha))
+        report['upper'] = np.percentile(sims_iroas,
+                                        100 * (1 - tail_probability))
+        report['incremental_response_upper'] = delta_response.ppf(
+            1 - tail_probability)
       report['probability'] = np.mean(sims_iroas > posterior_threshold)
       report['level'] = level
       report['posterior_threshold'] = posterior_threshold
       report['incremental_cost'] = delta_cost.kwds['loc']
       report['incremental_response'] = delta_response.kwds['loc']
+      report['incremental_response_lower'] = delta_response.ppf(
+          tail_probability)
+      report['relative_lift'] = relative_lift
+      report['relative_lift_lower'] = relative_lift_lower
+      report['relative_lift_upper'] = relative_lift_upper
       report['scenario'] = 'variable'
 
       return report
@@ -276,7 +308,7 @@ class TBRiROAS(object):
                        f'got {metric}')
 
     periods = (self.periods.pre, self.periods.test, self.periods.cooldown)
-    alpha = (1 - level) / tails
+    tail_probability = (1 - level) / tails
 
     metric_data = metric_df.analysis_data.copy().reset_index()
 
@@ -321,11 +353,11 @@ class TBRiROAS(object):
       delta_metric = metric_df.causal_cumulative_distribution()
       pointwise_difference = metric_df.causal_effect(
           periods).reset_index().rename(columns={0: 'metric'})
-      lower = np.diff(delta_metric.ppf(alpha), prepend=0)
+      lower = np.diff(delta_metric.ppf(tail_probability), prepend=0)
       lower = np.concatenate((pointwise_difference.loc[
           pointwise_difference['date'] < test_start_date,
           'metric'].values, lower))
-      upper = np.diff(delta_metric.ppf(1 - alpha), prepend=0)
+      upper = np.diff(delta_metric.ppf(1 - tail_probability), prepend=0)
       upper = np.concatenate((pointwise_difference.loc[
           pointwise_difference['date'] < test_start_date,
           'metric'].values, upper))
@@ -358,8 +390,8 @@ class TBRiROAS(object):
       cumulative_effect_df = common_classes.EstimatedTimeSeriesWithConfidenceInterval(
           {
               'date': experiment_dates,
-              'lower': delta_metric.ppf(alpha),
-              'upper': delta_metric.ppf(1 - alpha),
+              'lower': delta_metric.ppf(tail_probability),
+              'upper': delta_metric.ppf(1 - tail_probability),
               'estimate': cumulative_effect
           })
 
