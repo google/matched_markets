@@ -23,6 +23,7 @@ from matched_markets.methodology import tbrdiagnostics
 import pandas as pd
 from scipy import stats
 
+
 import unittest
 
 CSV_PATH = 'matched_markets/csv/'
@@ -210,6 +211,18 @@ class TBRDiagnosticsTest(unittest.TestCase):
     perturbed_data.loc[select_geo_and_date, 'response'] = 1000
     tbrdiag.fit(perturbed_data)
     self.assertEqual(tbrdiag._diagnostics['outlier_dates'], [bad_date])
+
+  def testOutlierDatesWithNoCorrelation(self):
+    """Tests that we avoid an infinite loop if there is no correlation."""
+
+    tbrdiag = tbrdiagnostics.TBRDiagnostics()
+    # Read in the csv file.
+    with open(
+        os.path.join("", CSV_PATH,
+                     'outlier_dataset.csv')) as csvfile:
+      data = pd.read_csv(csvfile, parse_dates=['date'])
+    tbrdiag.fit(data)
+    self.assertEmpty(tbrdiag._diagnostics['outlier_dates'])
 
   def testNoisyGeos(self):
     """Tests that noisy geos are detected."""

@@ -126,6 +126,9 @@ py_test(
     srcs = [
         "tests/test_tbrdiagnostics.py",
     ],
+    data = [
+        "csv/outlier_dataset.csv",
+    ],
     python_version = "PY3",
     srcs_version = "PY3",
     deps = [

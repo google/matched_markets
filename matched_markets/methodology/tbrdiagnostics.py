@@ -222,20 +222,21 @@ class TBRDiagnostics(object):
       A list of dates (in the data set) that were detected to be outliers.
     """
     excluded_dates = []
-    while True:
-      data_subset = self._analysis_data.drop(excluded_dates)
-      if data_subset.shape[0] == 0:
-        break
-      reg_fit = smf.ols('y ~ x', data=data_subset).fit()
-      absresid = abs(OLSInfluence(reg_fit).get_resid_studentized_external())
-      pretest_len = data_subset.shape[0] - len(excluded_dates)
-      beta_quantile = stats.beta.ppf(1 - max_prob, pretest_len, 1)
-      threshold = stats.t.ppf((1 + beta_quantile) / 2, df=pretest_len - 3)
-      max_resid = max(absresid)
-      if max_resid < threshold:
-        break
-      exclude_date = list(data_subset.index[absresid == max_resid])
-      excluded_dates.extend(exclude_date)
+    if self._correlation_test(min_cor=0.5, prefer_cor=0.8, credible_level=0.95):
+      while True:
+        data_subset = self._analysis_data.drop(excluded_dates)
+        if data_subset.shape[0] == 0:
+          break
+        reg_fit = smf.ols('y ~ x', data=data_subset).fit()
+        absresid = abs(OLSInfluence(reg_fit).get_resid_studentized_external())
+        pretest_len = data_subset.shape[0] - len(excluded_dates)
+        beta_quantile = stats.beta.ppf(1 - max_prob, pretest_len, 1)
+        threshold = stats.t.ppf((1 + beta_quantile) / 2, df=pretest_len - 3)
+        max_resid = max(absresid)
+        if max_resid < threshold:
+          break
+        exclude_date = list(data_subset.index[absresid == max_resid])
+        excluded_dates.extend(exclude_date)
 
     return excluded_dates
 

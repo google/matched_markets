@@ -352,7 +352,7 @@ class TBRMMDiagnostics:
       sqrt((1 + dx^2/var(x, ddof=0))/n + 1/n_test)
 
     Here, x = 'control', y = 'treatment', where
-      dx = test period mean of x - pretest period mean of y
+      dx = test period mean of x - pretest period mean of x
       dy = test period mean of y - pretest period mean of y
       b = coefficient of 'x' in the TBR regression equation y = a + bx + e.
       n_test = number of test period time points.
