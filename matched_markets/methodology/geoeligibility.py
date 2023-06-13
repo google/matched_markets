@@ -176,7 +176,7 @@ class GeoEligibility:
     df = self.data  # DataFrame indexed by the geo ID.
 
     if geos:
-      df = df.loc[geos]
+      df = df.loc[list(geos)]
       if indices:
         df = df.reset_index()
     elif indices:

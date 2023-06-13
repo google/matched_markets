@@ -140,7 +140,7 @@ class TBRMMData:
       if geos_missing:
         raise ValueError('Required geos {} were not found '
                          'in the data'.format(sorted(geos_missing)))
-      df_elig = geo_eligibility.data.loc[common_geos]
+      df_elig = geo_eligibility.data.loc[list(common_geos)]
       geo_eligibility = GeoEligibility(df_elig)
       geo_assignments = geo_eligibility.get_eligible_assignments()
 
@@ -179,8 +179,8 @@ class TBRMMData:
         indices=True)
 
     self._geo_index = geos
-    self._array = self.df.loc[geos].to_numpy()
-    self._array_geo_share = np.array(self.geo_share[geos])
+    self._array = self.df.loc[list(geos)].to_numpy()
+    self._array_geo_share = np.array(self.geo_share[list(geos)])
 
   def aggregate_time_series(self, geo_indices: GeoIndexSet) -> Vector:
     """Return the aggregate the time series over a set of chosen geos.

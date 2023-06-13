@@ -15,13 +15,14 @@
 """Test utilities.
 """
 
+import altair as alt
 from matched_markets.methodology import common_classes
 from matched_markets.methodology import utils
-import altair as alt
 import numpy as np
 import pandas as pd
 
 import unittest
+
 
 TimeWindow = common_classes.TimeWindow
 
@@ -139,8 +140,8 @@ class UtilsTest(unittest.TestCase):
     days_to_remove = utils.find_days_to_exclude(day_week_exclude)
     periods = utils.expand_time_windows(days_to_remove)
     expected = [
-        pd.Timestamp('2020-10-10', freq='D'),
-        pd.Timestamp('2020-08-10', freq='D'),
+        pd.Timestamp('2020-10-10'),
+        pd.Timestamp('2020-08-10'),
     ]
     expected += pd.date_range(
         start='2020-11-10', end='2020-12-10', freq='D').to_list()

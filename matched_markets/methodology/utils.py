@@ -48,7 +48,7 @@ def kwarg_subdict(prefix, **kwargs):
   sub_kwargs = [k for k in kwargs.keys() if rgx.search(k)]
 
   # Return the matched kwargs, stripping off prefix.
-  return {rgx.match(k).group(1): kwargs[k] for k in sub_kwargs}
+  return {rgx.match(k).group(1): kwargs[k] for k in sub_kwargs}  # pytype: disable=attribute-error  # re-none
 
 
 def float_order(x):
@@ -113,9 +113,9 @@ def brownian_bridge_bounds(n, sd_bound_multiplier):
 
   Args:
     n: (int >= 1) Length of the time series of the cumulative residuals
-     following a Brownian Bridge process.
-   sd_bound_multiplier: (numeric > 0) Multiplier for bounds on cumulative
-     standardized residuals.
+      following a Brownian Bridge process.
+    sd_bound_multiplier: (numeric > 0) Multiplier for bounds on cumulative
+      standardized residuals.
 
   Returns:
     A list of length n, of the Brownian Bridge process bounds in absolute
@@ -145,24 +145,23 @@ def credible_interval(simulations, level):
   Raises:
     ValueError: if the requested level is too large (< 1/ len(sims)).
   """
-  alpha = (1 - level)/2.0
+  alpha = (1 - level) / 2.0
   nvals = len(simulations)
-  if alpha < 1.0/nvals:
+  if alpha < 1.0 / nvals:
     raise ValueError('Too few values to provide requested quantiles.')
   sims_sort = np.sort(np.copy(simulations))
   frac = nvals * np.array([alpha, 0.5, 1.0 - alpha]) - 1.0
   low = np.floor(frac).astype(np.int64)
-  return sims_sort[low] + (frac - low)*(sims_sort[low + 1] - sims_sort[low])
+  return sims_sort[low] + (frac - low) * (sims_sort[low + 1] - sims_sort[low])
 
 
-def find_days_to_exclude(
-    dates_to_exclude: List[str]) -> List[TimeWindow]:
+def find_days_to_exclude(dates_to_exclude: List[str]) -> List[TimeWindow]:
   """Returns a list of time windows to exclude from a list of days and periods.
 
   Args:
     dates_to_exclude: a List of strings with format indicating a single day as
-    '2020/01/01' (YYYY/MM/DD) or an entire time period as
-    '2020/01/01 - 2020/02/01' (indicating start and end date of the time period)
+      '2020/01/01' (YYYY/MM/DD) or an entire time period as '2020/01/01 -
+      2020/02/01' (indicating start and end date of the time period)
 
   Returns:
     days_exclude: a List of TimeWindows obtained from the list in input.
@@ -173,19 +172,24 @@ def find_days_to_exclude(
     if len(tmp) == 1:
       try:
         days_exclude.append(
-            TimeWindow(pd.Timestamp(tmp[0]), pd.Timestamp(tmp[0])))
+            TimeWindow(pd.Timestamp(tmp[0]), pd.Timestamp(tmp[0]))
+        )
       except ValueError:
         raise ValueError(f'Cannot convert the string {tmp[0]} to a valid date.')
     elif len(tmp) == 2:
       try:
         days_exclude.append(
-            TimeWindow(pd.Timestamp(tmp[0]), pd.Timestamp(tmp[1])))
+            TimeWindow(pd.Timestamp(tmp[0]), pd.Timestamp(tmp[1]))
+        )
       except ValueError:
         raise ValueError(
-            f'Cannot convert the strings in {tmp} to a valid date.')
+            f'Cannot convert the strings in {tmp} to a valid date.'
+        )
     else:
-      raise ValueError(f'The input {tmp} cannot be interpreted as a single' +
-                       ' day or a time window')
+      raise ValueError(
+          f'The input {tmp} cannot be interpreted as a single'
+           ' day or a time window'
+      )
 
   return days_exclude
 
@@ -202,7 +206,8 @@ def expand_time_windows(periods: List[TimeWindow]) -> List[pd.Timestamp]:
   days_exclude = []
   for window in periods:
     days_exclude += pd.date_range(
-        window.first_day, window.last_day, freq='D').to_list()
+        window.first_day, window.last_day, freq='D'
+    ).to_list()
 
   return list(set(days_exclude))
 
@@ -223,13 +228,16 @@ def human_readable_number(number: float) -> str:
   while abs(number) >= 1000 and magnitude < 4:
     magnitude += 1
     number /= 1000.0
-  readable_number = '{}{}'.format('{:f}'.format(number).rstrip('0').rstrip('.'),
-                                  ['', 'K', 'M', 'B', 'tn'][magnitude])
+  readable_number = '{}{}'.format(
+      '{:f}'.format(number).rstrip('0').rstrip('.'),
+      ['', 'K', 'M', 'B', 'tn'][magnitude],
+  )
   return readable_number
 
 
-def default_geo_assignment(geo_level_time_series: pd.DataFrame,
-                           geo_eligibility: pd.DataFrame) -> pd.DataFrame:
+def default_geo_assignment(
+    geo_level_time_series: pd.DataFrame, geo_eligibility: pd.DataFrame
+) -> pd.DataFrame:
   """Set the default assignment eligibility for missing geos.
 
   Geos missing in the geo assignment table but present in the geo level time
@@ -254,19 +262,25 @@ def default_geo_assignment(geo_level_time_series: pd.DataFrame,
     geo_eligibility['geo'] = pd.to_numeric(geo_eligibility['geo'])
 
   missing_geos = list(
-      set(geo_level_time_series['geo']) - set(geo_eligibility['geo']))
+      set(geo_level_time_series['geo']) - set(geo_eligibility['geo'])
+  )
 
-  return geo_eligibility.append(
-      pd.DataFrame({
-          'geo': missing_geos,
-          'control': 1,
-          'treatment': 1,
-          'exclude': 1
-      })).sort_values(by='geo').reset_index(drop=True)
+  return pd.concat(
+      [
+          geo_eligibility,
+          pd.DataFrame(
+              {'geo': missing_geos, 'control': 1, 'treatment': 1, 'exclude': 1}
+          )
+      ],
+      ignore_index=True,
+  ).sort_values(by='geo').reset_index(drop=True)
 
 
-def plot_iroas_over_time(iroas_df: pd.DataFrame, experiment_dates: pd.DataFrame,
-                         cooldown_date: pd.DataFrame):
+def plot_iroas_over_time(
+    iroas_df: pd.DataFrame,
+    experiment_dates: pd.DataFrame,
+    cooldown_date: pd.DataFrame,
+):
   """Returns a chart of the iROAS estimate over time with confidence bands.
 
   This function provides a visualization of the evolution of the iROAS estimate
@@ -276,8 +290,8 @@ def plot_iroas_over_time(iroas_df: pd.DataFrame, experiment_dates: pd.DataFrame,
   Args:
     iroas_df: a dataframe with columns: date, lower, mean, upper
     experiment_dates: dataframe with columns (date, color) which contains two
-      dates for each period (start, end), and the column color is the label
-      used in the chart to refer to the corresponding period, e.g. "Experiment
+      dates for each period (start, end), and the column color is the label used
+      in the chart to refer to the corresponding period, e.g. "Experiment
       period" or "Pretes period".
     cooldown_date: dataframe with column (date, color) with only one entry,
       where date indicates the last day in the cooldown period, and color is the
@@ -286,56 +300,83 @@ def plot_iroas_over_time(iroas_df: pd.DataFrame, experiment_dates: pd.DataFrame,
   Returns:
     iroas_chart: Chart containing the plot.
   """
-  iroas_base = alt.Chart(iroas_df).mark_line().encode(
-      x=alt.X('date:T', axis=alt.Axis(title='', format=('%b %e'))))
+  iroas_base = (
+      alt.Chart(iroas_df)
+      .mark_line()
+      .encode(x=alt.X('date:T', axis=alt.Axis(title='', format='%b %e')))
+  )
 
   iroas_selection = alt.selection_single(
       fields=['date'],
       nearest=True,
       on='mouseover',
       empty='none',
-      clear='mouseout')
+      clear='mouseout',
+  )
 
   iroas_lines = iroas_base.mark_line().encode(
-      y=alt.Y('mean:Q', axis=alt.Axis(title=' ', format='.3')))
+      y=alt.Y('mean:Q', axis=alt.Axis(title=' ', format='.3'))
+  )
 
   iroas_points = iroas_lines.mark_point().transform_filter(iroas_selection)
 
   iroas_rule1 = iroas_base.mark_rule().encode(
-      tooltip=['date:T', 'mean:Q', 'lower:Q', 'upper:Q'])
+      tooltip=['date:T', 'mean:Q', 'lower:Q', 'upper:Q']
+  )
 
   iroas_rule = iroas_rule1.encode(
-      opacity=alt.condition(iroas_selection, alt.value(0.3), alt.value(
-          0))).add_selection(iroas_selection)
+      opacity=alt.condition(iroas_selection, alt.value(0.3), alt.value(0))
+  ).add_selection(iroas_selection)
 
-  iroas_ci_bands_rule = alt.Chart(iroas_df).mark_area(color='gray').encode(
-      alt.X('date:T'), y='lower:Q', y2='upper:Q', opacity=alt.value(0.5))
+  iroas_ci_bands_rule = (
+      alt.Chart(iroas_df)
+      .mark_area(color='gray')
+      .encode(
+          alt.X('date:T'), y='lower:Q', y2='upper:Q', opacity=alt.value(0.5)
+      )
+  )
 
-  date_rule = alt.Chart(
-      experiment_dates[experiment_dates['color'] ==
-                       'Experiment period']).mark_rule(strokeWidth=2).encode(
-                           x='date:T',
-                           color=alt.Color(
-                               'color',
-                               scale=alt.Scale(
-                                   domain=[
-                                       'Experiment period',
-                                       'End of cooldown period',
-                                       'iROAS estimate'
-                                   ],
-                                   range=['black', 'black', '#1f77b4'])))
-  cooldown_date_rule = alt.Chart(cooldown_date).mark_rule(
-      strokeWidth=2, strokeDash=[5, 2], color='black').encode(
-          x='date:T', color='color:N')
+  date_rule = (
+      alt.Chart(
+          experiment_dates[experiment_dates['color'] == 'Experiment period']
+      )
+      .mark_rule(strokeWidth=2)
+      .encode(
+          x='date:T',
+          color=alt.Color(
+              'color',
+              scale=alt.Scale(
+                  domain=[
+                      'Experiment period',
+                      'End of cooldown period',
+                      'iROAS estimate',
+                  ],
+                  range=['black', 'black', '#1f77b4'],
+              ),
+          ),
+      )
+  )
+  cooldown_date_rule = (
+      alt.Chart(cooldown_date)
+      .mark_rule(strokeWidth=2, strokeDash=[5, 2], color='black')
+      .encode(x='date:T', color='color:N')
+  )
   # Compile chart
-  iroas_chart = alt.layer(iroas_lines, iroas_rule, iroas_points, date_rule,
-                          cooldown_date_rule, iroas_ci_bands_rule)
+  iroas_chart = alt.layer(
+      iroas_lines,
+      iroas_rule,
+      iroas_points,
+      date_rule,
+      cooldown_date_rule,
+      iroas_ci_bands_rule,
+  )
 
   return iroas_chart
 
 
-def infer_frequency(data: pd.DataFrame, date_index: str,
-                    series_index: str) -> str:
+def infer_frequency(
+    data: pd.DataFrame, date_index: str, series_index: str
+) -> str:
   """Infers frequency of data from pd.DataFrame with multiple indices.
 
   Infers frequency of data from pd.DataFrame with two indices, one for the slice
@@ -364,34 +405,37 @@ def infer_frequency(data: pd.DataFrame, date_index: str,
   series_names = data.index.get_level_values(series_index).unique().tolist()
   series_frequencies = []
   for series in series_names:
-    observed_times = data.iloc[data.index.get_level_values(series_index) ==
-                               series].index.get_level_values(date_index)
+    observed_times = data.iloc[
+        data.index.get_level_values(series_index) == series
+    ].index.get_level_values(date_index)
     n_steps = len(observed_times)
 
     if n_steps > 1:
       time_diffs = (
           observed_times[1:n_steps] -
-          observed_times[0:(n_steps - 1)]).astype('timedelta64[D]').array
+          observed_times[0:(n_steps - 1)]).astype('timedelta64[s]').values
 
-      min_frequency = np.min(time_diffs)
+      # Compute the frequency in days
+      min_frequency = np.min(time_diffs).astype('float') / (60 * 60 * 24)
 
       series_frequencies.append(min_frequency)
 
   if not series_frequencies:
     raise ValueError(
-        'At least one series with more than one observation must be provided.')
+        'At least one series with more than one observation must be provided.'
+    )
 
   if series_frequencies.count(series_frequencies[0]) != len(series_frequencies):
     raise ValueError(
-        'The provided time series seem to have irregular frequencies.')
+        'The provided time series seem to have irregular frequencies.'
+    )
 
   try:
-    frequency = {
-        1: 'D',
-        7: 'W'
-    }[series_frequencies[0]]
+    frequency = {1: 'D', 7: 'W'}[series_frequencies[0]]
   except KeyError:
-    raise ValueError('Frequency could not be identified. Got %d days.' %
-                     series_frequencies[0])
+    raise ValueError(
+        'Frequency could not be identified. Got'
+        f' {int(series_frequencies[0])} days.'
+    )
 
   return frequency
