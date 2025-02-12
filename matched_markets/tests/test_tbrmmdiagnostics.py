@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""Test TBR Matched Markets Diagnostics.
-"""
+"""Test TBR Matched Markets Diagnostics."""
+
 from matched_markets.methodology import tbrmmdesignparameters
 from matched_markets.methodology import tbrmmdiagnostics
 import numpy as np
 
 import unittest
+from absl.testing import parameterized
 
 TBRMMDesignParameters = tbrmmdesignparameters.TBRMMDesignParameters
 TBRMMDiagnostics = tbrmmdiagnostics.TBRMMDiagnostics
 
 
-class TBRMMDiagnosticsTest(unittest.TestCase):
+class TBRMMDiagnosticsTest(parameterized.TestCase, unittest.TestCase):
 
   def setUp(self):
     """Set up a valid Geo Eligibility data frame."""
@@ -32,11 +33,16 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
     self.par = TBRMMDesignParameters(n_test=14, iroas=3.0, min_corr=0.8,
                                      sig_level=0.9, power_level=0.5,
                                      flevel=0.9)
-    # Corr(x, y) = 0.900.
     y = (-1.4, -0.8, -0.8, -0.7, -0.6, -0.5, -0.5, -0.5, -0.2,
          -0.2, -0.0, 0.3, 0.4, 0.5, 0.6, 0.6, 1.0, 1.3, 1.6, 1.9, 2.2)
     x = (-0.8, -1.1, -1.2, -0.9, -1.0, -0.3, -0.4, -1.2, 0.5, 0.0,
          0.1, -0.5, 0.4, 0.6, 1.1, -0.1, 1.3, 1.4, 1.8, 1.4, 1.6)
+    # Expected correlation between x and y.
+    self.corr_xy = 0.900
+    # Expected correlation between x and y in the training period.
+    self.corr_xy_training = 0.351
+    # Expected correlation between x and y in the eval period.
+    self.corr_xy_eval = 0.838
     self.x = np.array(x)
     self.y = np.array(y)
     self.x_error_msg = 'x must be a one-dimensional vector'
@@ -45,33 +51,101 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
     self.corr = np.corrcoef(x, y)[0, 1]
     self.xy_short = (1, 2)  # Minimum length = 3.
 
-  def testInit(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testInit(self, diagnostics_type):
     """The object must be properly initialized."""
-    obj = TBRMMDiagnostics(self.y, self.par)
-    self.assertTrue(all(obj.y == self.y))
+    obj = TBRMMDiagnostics(self.y, self.par, diagnostics_type=diagnostics_type)
+    if diagnostics_type == tbrmmdiagnostics.DiagnosticsType.TRAINING:
+      y = self.y[: -self.par.n_test]
+    else:
+      y = self.y
+    self.assertTrue(all(obj.y == y))
     self.assertIsNone(obj.x)
     self.assertIsNone(obj.corr)
     self.assertIsNone(obj.required_impact)
 
-  def testYPropertySetter(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testYPropertySetter(self, diagnostics_type):
     """The y property setter works."""
-    obj = TBRMMDiagnostics(self.y, self.par)
+    obj = TBRMMDiagnostics(self.y, self.par, diagnostics_type=diagnostics_type)
     obj.y = self.x  # Change value.
-    self.assertTrue(all(obj.y == self.x))
+    if diagnostics_type == tbrmmdiagnostics.DiagnosticsType.TRAINING:
+      y = self.x[: -self.par.n_test]
+    else:
+      y = self.x
+    self.assertTrue(all(obj.y == y))
 
-  def testYPropertyDimension(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testYPropertyDimension(self, diagnostics_type):
     """The y property requires a (1-dimensional) vector."""
     with self.assertRaisesRegex(ValueError, self.y_error_msg):
-      TBRMMDiagnostics(self.twodim_array, self.par)
+      TBRMMDiagnostics(
+          self.twodim_array, self.par, diagnostics_type=diagnostics_type
+      )
 
-    obj = TBRMMDiagnostics(self.y, self.par)
+    obj = TBRMMDiagnostics(self.y, self.par, diagnostics_type=diagnostics_type)
     with self.assertRaisesRegex(ValueError, self.y_error_msg):
       obj.y = self.twodim_array
 
-  def testYPropertyLength(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testYPropertyLength(self, diagnostics_type):
     """The y property must satisfy a minimum length requirement."""
     with self.assertRaisesRegex(ValueError, 'y must have length >= 3'):
-      TBRMMDiagnostics(self.xy_short, self.par)
+      TBRMMDiagnostics(
+          self.xy_short, self.par, diagnostics_type=diagnostics_type
+      )
 
   def testYPropertyNoneValue(self):
     """The y property disallows None."""
@@ -82,11 +156,29 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, self.y_error_msg):
       obj.y = None
 
-  def testXProperty(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testXProperty(self, diagnostics_type):
     """The x property setter/getter works."""
-    obj = TBRMMDiagnostics(self.y, self.par)
+    obj = TBRMMDiagnostics(self.y, self.par, diagnostics_type=diagnostics_type)
+    if diagnostics_type == tbrmmdiagnostics.DiagnosticsType.TRAINING:
+      x = self.x[: -self.par.n_test]
+    else:
+      x = self.x
     obj.x = self.x
-    self.assertTrue(all(obj.x == self.x))
+    self.assertTrue(all(obj.x == x))
 
   def testXPropertyLength(self):
     """The x property must have length = length of y."""
@@ -96,9 +188,23 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
       obj = TBRMMDiagnostics(self.y, self.par)
       obj.x = self.xy_short
 
-  def testXPropertyBadValue(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testXPropertyBadValue(self, diagnostics_type):
     """The x property requires a (1-dimensional) vector."""
-    obj = TBRMMDiagnostics(self.y, self.par)
+    obj = TBRMMDiagnostics(self.y, self.par, diagnostics_type=diagnostics_type)
     with self.assertRaisesRegex(ValueError, self.x_error_msg):
       obj.x = self.twodim_array
 
@@ -110,15 +216,45 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
     obj.x = None
     self.assertIsNone(obj.x)
 
-  def testCorrProperty(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testCorrProperty(self, diagnostics_type):
     """The corr property returns the correlation if x is set."""
-    obj = TBRMMDiagnostics(self.y, self.par)
+    obj = TBRMMDiagnostics(self.y, self.par, diagnostics_type=diagnostics_type)
     obj.x = self.x
-    self.assertAlmostEqual(obj.corr, 0.9, places=3)
+    if diagnostics_type == tbrmmdiagnostics.DiagnosticsType.TRAINING:
+      expected_corr = self.corr_xy_training
+    elif diagnostics_type == tbrmmdiagnostics.DiagnosticsType.EVAL:
+      expected_corr = self.corr_xy_eval
+    else:
+      expected_corr = self.corr_xy
+    self.assertAlmostEqual(obj.corr, expected_corr, places=3)
 
-  def testCorrPropertyResetsToNone(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testCorrPropertyResetsToNone(self, diagnostics_type):
     """The corr property returns None if x is reset to None."""
-    obj = TBRMMDiagnostics(self.y, self.par)
+    obj = TBRMMDiagnostics(self.y, self.par, diagnostics_type=diagnostics_type)
     obj.x = self.x
     self.assertIsNotNone(obj.corr)
     obj.x = None
@@ -134,22 +270,35 @@ class TBRMMDiagnosticsTest(unittest.TestCase):
 
 class ImpactEstimateTest(TBRMMDiagnosticsTest):
 
-  # tuples = (n_test, n, flevel, sig_level, power_level)
-  # for the estimate without the sigma term.
-  parameters = {1: (14, 21, 0.90, 0.90, 0.80),
-                2: (28, 21, 0.90, 0.90, 0.80),
-                3: (14, 14, 0.90, 0.90, 0.80),
-                4: (14, 21, 0.99, 0.90, 0.80),
-                5: (14, 21, 0.90, 0.95, 0.80),
-                6: (14, 21, 0.90, 0.90, 0.90)}
+  # tuples = (n_test, n, flevel, sig_level, power_level,
+  # impact_multiplier_factor) for the estimate without the sigma term.
+  parameters = {1: (14, 21, 0.90, 0.90, 0.80, 1.0),
+                2: (28, 21, 0.90, 0.90, 0.80, 1.0),
+                3: (14, 14, 0.90, 0.90, 0.80, 1.0),
+                4: (14, 21, 0.99, 0.90, 0.80, 1.0),
+                5: (14, 21, 0.90, 0.95, 0.80, 1.0),
+                6: (14, 21, 0.90, 0.90, 0.90, 1.0),
+                7: (14, 21, 0.99, 0.90, 0.80, 2.0),
+                8: (14, 21, 0.90, 0.95, 0.80, 2.0)}
 
   correct_values = {1: 11.055, 2: 18.272, 3: 12.533,
-                    4: 11.841, 5: 13.083, 6: 13.413}
+                    4: 11.841, 5: 13.083, 6: 13.413,
+                    7: 23.682, 8: 26.166}
 
   def setUp(self):
     """Set up a valid Geo Eligibility data frame."""
     super().setUp()
     self.obj = TBRMMDiagnostics(self.y, self.par)
+    self.obj_holdout_training = TBRMMDiagnostics(
+        self.y,
+        self.par,
+        diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+    )
+    self.obj_holdout_eval = TBRMMDiagnostics(
+        self.y,
+        self.par,
+        diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+    )
 
   def testRequiredImpactGivenCorr(self):
     """The impact estimates are correctly calculated.
@@ -167,11 +316,18 @@ class ImpactEstimateTest(TBRMMDiagnosticsTest):
     """
     for corr in (0.5, 0.9):
       for key, params in self.parameters.items():
-        n_test, n, flevel, sig_level, power_level = params
+        n_test, n, flevel, sig_level, power_level, impact_multiplier_factor = (
+            params
+        )
         y = self.y[:n]
-        par = TBRMMDesignParameters(n_test=n_test, iroas=3.0, flevel=flevel,
-                                    sig_level=sig_level,
-                                    power_level=power_level)
+        par = TBRMMDesignParameters(
+            n_test=n_test,
+            iroas=3.0,
+            flevel=flevel,
+            sig_level=sig_level,
+            power_level=power_level,
+            impact_multiplier_factor=impact_multiplier_factor,
+        )
         diag = TBRMMDiagnostics(y, par)
         sigma = np.std(y, ddof=2) * np.sqrt(1 - corr ** 2)
         correct_estimate = self.correct_values[key] * sigma
@@ -179,9 +335,28 @@ class ImpactEstimateTest(TBRMMDiagnosticsTest):
                                correct_estimate,
                                places=3)
 
-  def testRequiredImpactProperty(self):
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='use_holdout_training',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.TRAINING,
+      ),
+      dict(
+          testcase_name='use_holdout_eval',
+          diagnostics_type=tbrmmdiagnostics.DiagnosticsType.EVAL,
+      ),
+      dict(
+          testcase_name='do_not_use_holdout',
+          diagnostics_type=None,
+      ),
+  )
+  def testRequiredImpactProperty(self, diagnostics_type):
     """Required impact must be correctly calculated, given 'x'."""
-    diag = self.obj
+    if diagnostics_type == tbrmmdiagnostics.DiagnosticsType.TRAINING:
+      diag = self.obj_holdout_training
+    elif diagnostics_type == tbrmmdiagnostics.DiagnosticsType.EVAL:
+      diag = self.obj_holdout_eval
+    else:
+      diag = self.obj
     diag.x = self.x
     self.assertEqual(
         diag.required_impact,
@@ -387,6 +562,8 @@ class AATestTest(TBRMMDiagnosticsTest):
                         423.4, 376.2, 450.5, 303.9, 370.3, 371.2, 445.1, 333.7,
                         397.9, 398.0, 416.4, 419.6, 338.2])
     self.n_test = 7
+    self.corr_xy_training = 0.739
+    self.corr_xy_eval = 0.694
     self.par = TBRMMDesignParameters(n_test=self.n_test, iroas=1.0,
                                      sig_level=0.9)
 
@@ -524,6 +701,8 @@ class TestsOkTest(TBRMMDiagnosticsTest):
                         106.4, 95.0, 129.2, 58.8, 93.6, 92.3])
 
     self.n_test = 7
+    self.corr_xy_training = 0.739
+    self.corr_xy_eval = 0.694
     self.par = TBRMMDesignParameters(n_test=self.n_test, iroas=1.0)
 
   def testNoX(self):

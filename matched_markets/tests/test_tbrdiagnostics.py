@@ -61,8 +61,7 @@ class TBRDiagnosticsTest(unittest.TestCase):
     diag = tbrdiag._diagnostics
     self.assertIsInstance(diag, dict)
     self.assertIsNone(diag['corr_test'])
-    self.assertIsNone(diag['enough_data'])
-    self.assertIsNone(diag['pretest_start'])
+    self.assertIsNone(diag['noisy_geos'])
     self.assertIsNone(diag['outlier_dates'])
 
     # Accessors.

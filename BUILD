@@ -1,5 +1,5 @@
 package(
-    default_visibility = ["//third_party/py:__subpackages__"],
+    default_visibility = ["//visibility:public"],
 )
 
 licenses(["notice"])

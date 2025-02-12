@@ -120,6 +120,32 @@ class DesignWithinConstraints(unittest.TestCase):
     self.assertFalse(
         mm.design_within_constraints(treatment_group, control_group))
 
+  def testControlShareBetweenBounds(self):
+    """Control response share between the two groups is not within (0.4,0.7)."""
+    self.par.control_share_range = (0.4, 0.7)
+    mm = TBRMatchedMarkets(self.data, self.par)
+    treatment_group = set([0])
+    control_group = set([2, 3, 4])
+    self.assertFalse(
+        mm.design_within_constraints(treatment_group, control_group))
+    treatment_group = set([2, 3, 4])
+    control_group = set([0])
+    self.assertFalse(
+        mm.design_within_constraints(treatment_group, control_group))
+
+  def testExcludedShareBetweenBounds(self):
+    """Excluded response share between the two groups is not within (0.3,1.0)."""
+    self.par.excluded_share_range = (0.3, 1.0)
+    mm = TBRMatchedMarkets(self.data, self.par)
+    treatment_group = set([0])
+    control_group = set([2, 3, 4])
+    self.assertFalse(
+        mm.design_within_constraints(treatment_group, control_group))
+    treatment_group = set([2, 3, 4])
+    control_group = set([0])
+    self.assertFalse(
+        mm.design_within_constraints(treatment_group, control_group))
+
   def testNumberTreatmentGeosBetweenBounds(self):
     """Treatment group size is not within (2,3)."""
     self.par.treatment_geos_range = (2, 3)
@@ -192,6 +218,23 @@ class GreedySearch(unittest.TestCase):
       self.assertEqual(designs[ind].score.diag.corr, designs[ind].diag.corr)
       self.assertEqual(designs[ind].score.score.corr,
                        round(designs[ind].diag.corr, 2))
+
+  def testGreedySearchWithHoldout(self):
+    """Test greedy search with holdout as overfitting fix, and test get eval scores."""
+    holdout_test_par = TBRMMDesignParameters(
+        n_test=3, iroas=3.0
+    )
+    mm = TBRMatchedMarkets(self.data, holdout_test_par, use_holdout=True)
+    designs = mm.greedy_search()
+    selected_design = sorted(designs, reverse=True)[0]
+    eval_score = mm.get_design_eval_scores(selected_design)
+    minimum_detectable_impact = round(eval_score.diag.required_impact, 2)
+
+    self.assertSetEqual(selected_design.treatment_geos, {'1'})
+    self.assertSetEqual(selected_design.control_geos, {'2', '3'})
+    self.assertEqual(minimum_detectable_impact, 259.88)
+    self.assertEqual(eval_score.score.corr, 0.93)
+    self.assertEqual(eval_score.score.corr, round(eval_score.diag.corr, 2))
 
   def testGreedySearchScoreWithIroas(self):
     """Tests the optimal design is found based on correlation and iROAS."""

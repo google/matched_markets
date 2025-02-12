@@ -15,95 +15,20 @@
 """Time Based Regression geoexperiment methodology.
 """
 
-import collections.abc
-import functools
-from matched_markets.methodology import semantics
-from matched_markets.methodology import utils
-import matplotlib.pyplot as plt
+from matched_markets.methodology import base
 import numpy as np
 import pandas as pd
 import scipy as sp
 import statsmodels.api as sm
 
 
-class TBR(object):
+class TBR(base.BaseRegression):
   """Time Based Regression geoexperiment methodology.
 
   This class models the relationship between control and treatment time series.
 
   For details see [Kerman 2017](https://ai.google/research/pubs/pub45950).
   """
-
-  def __init__(self, use_cooldown=True):
-    """Initializes a TBR analysis.
-
-    Args:
-      use_cooldown: bool. Whether cooldown period should be utilised.
-    """
-    self.df_names = None
-    self.groups = None
-    self.periods = None
-    self.analysis_data = None
-    self.target = None
-    # Set up container for the response model, and potentially a cost model.
-    self.pre_period_model = None
-    self.use_cooldown = use_cooldown
-
-  def fit(self, data_frame, target, **kwargs):
-    """Fit the TBR model to the supplied data frame.
-
-    See optional kwargs for interpretation of the data frame.
-
-    Args:
-      data_frame: a pandas.DataFrame. Should contain the columns and indices
-      corresponding to the **kwargs information below. Only one of response
-      or cost need be present, corresponding to the supplied `target`. Must be
-      indexed by date.
-      target: `str`. The name of the column to be analysed.
-      **kwargs: optional column/index names for the data and related semantics:
-        key_geo='geo' - geo data frame index name.
-        key_period='period' - experimental period column name.
-        key_group='group' - group assignment column name.
-        key_cost='cost' - cost column name.
-        key_response='response' - response column name.
-        key_date='date' - date index name.
-        key_incr_cost='_incr_cost' - incremental cost column name.
-        key_incr_response='_incr_response' - incremental response column name.
-        group_control=1 - value representing the control group in the data.
-        group_treatment=2 - value representing the treatment group in the data.
-        period_pre=0 - value representing the pre-test period in the data.
-        period_test=1 - value representing the test period in the data.
-        period_cool=2 - value representing the cooldown period in the data.
-    """
-
-    # Set the target of the analysis.
-    self.target = target
-
-    # Extract any column / index name information supplied by the user.
-    user_df_names = utils.kwarg_subdict('key_', **kwargs)
-    self.df_names = semantics.DataFrameNameMapping(**user_df_names)
-
-    # Extract any semantics for control / treatment supplied by user.
-    user_group_semantics = utils.kwarg_subdict('group_', **kwargs)
-    self.groups = semantics.GroupSemantics(**user_group_semantics)
-
-    # Extract any semantics for experimental period supplied by user.
-    user_period_semantics = utils.kwarg_subdict('period_', **kwargs)
-    self.periods = semantics.PeriodSemantics(**user_period_semantics)
-
-    # Set up the analysis data.
-    self._construct_analysis_data(data_frame)
-    # Fit pre-period models for response and for cost.
-    self._fit_pre_period_model()
-
-  def _construct_analysis_data(self, data):
-    """Stores group-wise time series by aggregating over control/treat geos."""
-    preserve = [self.df_names.group, self.df_names.date]
-    agg_style = {
-        self.target: 'sum',
-        self.df_names.period: 'max'  # preserve the period info of the ts.
-    }
-    self.analysis_data = data.groupby(preserve).agg(agg_style)
 
   def _fit_pre_period_model(self):
     """Estimates the control-treatment relationship in the pre-period."""
@@ -114,51 +39,10 @@ class TBR(object):
     cntrl_mat = self._design_matrix(period_index)
 
     # Fit an OLS model to the pre- period data.
-    self.pre_period_model = sm.OLS(treat_vec.values, cntrl_mat.values).fit()
-
-  def predict(self, cntrl_mat):
-    """Counterfactual prediction for treatment group series in the test period.
-
-    Args:
-        cntrl_mat: a T by 2 `np.matrix`, representing a constant concatenated
-        to the control group time series, with T the test period length.
-
-    Returns:
-        A vector representing the expected treatment group time series.
-    """
-    return self.pre_period_model.predict(cntrl_mat)
-
-  def _make_period_index(self, periods):
-    """Returns an index for analysis_data rows in the desired time periods.
-
-    Args:
-      periods: int or non-empty iterable of int. The labels of the periods to
-        consider.
-
-    Returns: a pandas.Series of bools indicating whether each time point lies in
-      the supplied periods.
-
-    Raises:
-      ValueError: if an empty periods argument is passed.
-    """
-
-    # Ensure we can iterate through periods.
-    if not isinstance(periods, collections.abc.Iterable):
-      period_itr = (periods,)
-    else:
-      if periods:
-        period_itr = periods
-      else:
-        raise ValueError('Periods must not be an empty iterable.')
-
-    # Construct a list of bool valued pandas.Series indicating for each period
-    # whether each time point is in that period.
-    subset = self.analysis_data[self.df_names.period]
-    indices = [subset == i for i in period_itr]
-    return functools.reduce(np.logical_or, indices)
+    return sm.OLS(treat_vec.values, cntrl_mat.values).fit()
 
   def causal_effect(self, periods):
-    """Returns the difference of the actual and counterfactual prediction.
+    """Estimates the causal effect of treatment on the target variable.
 
     Args:
       periods: int or iterable of int. The labels of the periods to consider.
@@ -167,35 +51,7 @@ class TBR(object):
        A vector representing the estimated causal effect of the treatment on the
        target variable.
     """
-
-    period_index = self._make_period_index(periods)
-
-    # Get the test- period data in the form needed for regression.
-    treat_vec = self._response_vector(period_index)
-    cntrl_mat = self._design_matrix(period_index)
-
-    # Calculate the causal effect of the campaign.
-    treat_counter = self.predict(cntrl_mat)
-    return treat_vec - treat_counter
-
-  def _response_vector(self, period_index):
-    """Return the treatment group's time-series for the specified period."""
-    adata = self.analysis_data
-    return adata[period_index].loc[self.groups.treatment][self.target]
-
-  def _design_matrix(self, period_index):
-    """Return the design matrix for `periods`."""
-
-    # Short variable names
-    adata = self.analysis_data
-    cntrl = self.groups.control
-    target = self.target
-
-    # Construct the design matrix.
-    cntrl_vec = adata[period_index].loc[cntrl][target]
-    cntrl_mat = cntrl_vec.to_frame()
-    cntrl_mat.insert(0, 'const', 1)
-    return cntrl_mat
+    return self._uncorrected_causal_effect(periods)
 
   def causal_cumulative_distribution(self,
                                      time=None,
@@ -252,7 +108,7 @@ class TBR(object):
     # Set up the t-distribution.
     delta_mean = rescale * np.array(np.cumsum(causal_response)).flatten()
     delta_var = var_from_params + var_from_observations
-    delta_scale = rescale * sp.sqrt(delta_var).flatten()
+    delta_scale = rescale * np.sqrt(delta_var).flatten()
     delta_df = self.pre_period_model.df_resid
 
     # Return a frozen t-distribution with the correct parameters.
@@ -354,34 +210,3 @@ class TBR(object):
 
     # Return the report for `lines` last days of the test period.
     return result.tail(lines)
-
-  def plot(self, target, experiment_dates=None, margin=0.05):
-    """Plot the control and treatment time series for the target variable.
-
-    Args:
-      target: str. The name of the target variable.
-      experiment_dates: iterable of str. Dates to mark with a vertical line.
-      margin: float. Determines the space at the top and bottom of the y-axis.
-    """
-    # Labels of the group timeseries to be plotted.
-    groups = [self.groups.treatment, self.groups.control]
-
-    # Set the plotting limits.
-    column = self.analysis_data[target]
-    colmax = column.max()
-    colmin = column.min()
-    gap = margin*max(np.abs(colmax), margin*np.abs(colmin))
-    ymax = colmax + gap
-    ymin = colmin - gap
-
-    # Plot the timeseries.
-    for i in groups:
-      plt.plot(self.analysis_data.loc[i][target], label='Group %s' % i)
-    plt.legend()
-    plt.ylim((ymin, ymax))
-
-    # Place vertical lines on important dates.
-    if experiment_dates:
-      date_marks = pd.to_datetime(experiment_dates)
-      for dt in date_marks:
-        plt.vlines(dt, ymin, ymax, linestyles='dashed')

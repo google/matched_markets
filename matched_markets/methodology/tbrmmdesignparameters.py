@@ -14,12 +14,12 @@
 # ============================================================================
 """TBR Matched Markets: Design Parameters.
 """
-import operator
-import typing
-
-from typing import Optional, Tuple
 
 import dataclasses
+import operator
+import typing
+from typing import Optional, Tuple
+
 
 OptionalFloat = Optional[float]
 OptionalInt = Optional[int]
@@ -45,6 +45,14 @@ class TBRMMDesignParameters:
       (Optional) constraint on the range of the maximum acceptable treatment
       group share of response volume (share of response across geos and across
       the whole time series).
+    control_share_range: A tuple of two floats both strictly between (0, 1).
+      (Optional) constraint on the range of the maximum acceptable control
+      group share of response volume (share of response across geos and across
+      the whole time series).
+    excluded_share_range: A tuple of two floats both >= 0.0 and < 1.0.
+      (Optional) constraint on the range of the maximum acceptable share of
+      response volume for the excluded geos (geos not in the treatment or
+      control group).
     budget_range: A tuple of two floats >= 0.0. (Optional) constraint on the
       minimum and maximum acceptable *change* in the ad spend budget. This
       change is an increase in a heavy-up experiment, but in a go-dark
@@ -78,8 +86,14 @@ class TBRMMDesignParameters:
     min_corr: A float >= 0.8 and < 1.0. Minimum acceptable Pearson correlation
       between the treatment and control time series. A correlation less than
       min_corr will automatically disqualify a design. Default 0.8.
+    slope_diff_tolerance: A float > 0.0. Minimum acceptable difference between
+      the slope parameters of the spend and response models. Default 0.2.
     flevel: A float >= 0.9 and < 1.0. Inverse quantile of the f distribution
       parameter 'phi' used in the TBR preanalysis formula.
+    impact_multiplier_factor: A float >= 1.0. When the impact multiplier is > 1,
+      it is used to scale the estimated impact to account for situations such as
+      adding a calibration period and bias correction component to the reporting
+      metrics. Default 1.0.
   """
 
   _MIN_CORR = 0.8  # Lower bound for min_corr.
@@ -99,17 +113,21 @@ class TBRMMDesignParameters:
   volume_ratio_tolerance: OptionalFloat = None
   geo_ratio_tolerance: OptionalFloat = None
   treatment_share_range: OptionalRange = None
+  control_share_range: OptionalRange = None
   budget_range: OptionalRange = None
   treatment_geos_range: OptionalRange = None
   control_geos_range: OptionalRange = None
+  excluded_share_range: OptionalRange = None
   n_geos_max: OptionalInt = None
   n_pretest_max: int = 90
   n_designs: int = 1
   sig_level: float = 0.9
   power_level: float = 0.8
   min_corr: float = 0.8
+  slope_diff_tolerance: float = 0.2
   rho_max: float = 0.995
   flevel: float = 0.9
+  impact_multiplier_factor: float = 1.0
 
   def __post_init__(self):
     """Validate the values in the object, output informative error messages.
@@ -120,8 +138,11 @@ class TBRMMDesignParameters:
 
     self._test_value_vs_threshold('volume_ratio_tolerance', '>', 0.0)
     self._test_value_vs_threshold('geo_ratio_tolerance', '>', 0.0)
+    self._test_value_vs_threshold('slope_diff_tolerance', '>', 0.0)
 
     self._test_range(0.0, '<', ('treatment_share_range', '<'), '<', 1.0)
+    self._test_range(0.0, '<', ('control_share_range', '<'), '<', 1.0)
+    self._test_range(0.0, '<=', ('excluded_share_range', '<'), '<', 1.0)
     self._test_range(0.0, '<=', ('budget_range', '<'), '<', float('inf'))
     self._test_range(1, '<=', ('treatment_geos_range', '<='), '<', float('inf'))
     self._test_range(1, '<=', ('control_geos_range', '<='), '<', float('inf'))
@@ -129,6 +150,7 @@ class TBRMMDesignParameters:
     self._test_value_vs_threshold('n_geos_max', '>=', 2)
     self._test_value_vs_threshold('n_pretest_max', '>=', self._N_PRETEST_MIN)
     self._test_value_vs_threshold('n_designs', '>=', 1)
+    self._test_value_vs_threshold('impact_multiplier_factor', '>=', 1.0)
 
     self._test_value_within_bounds(0.9, '<=', 'rho_max', '<', 1.0)
     self._test_value_within_bounds(0.0, '<', 'sig_level', '<', 1.0)

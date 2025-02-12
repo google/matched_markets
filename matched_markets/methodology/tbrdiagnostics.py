@@ -15,11 +15,13 @@
 """Diagnostics class for screening and validating data for TBR analysis.
 """
 
+from typing import Iterable
 import math
 
 from matched_markets.methodology import semantics
 from matched_markets.methodology import utils
 import numpy as np
+import pandas as pd
 from scipy import stats
 import statsmodels.formula.api as smf
 from statsmodels.stats.outliers_influence import OLSInfluence
@@ -42,22 +44,19 @@ class TBRDiagnostics(object):
   """
   _SKEWNESS_COEF = 3  # For the correlation bound.
 
-  def __init__(self):
-    self._df_names = None
-    self._groups = None
-    self._periods = None
+  def __init__(
+      self,
+      diagnostics: Iterable[str] = ['corr_test', 'noisy_geos', 'zero_dates', 'outlier_dates'],
+  ):
+    self._df_names: semantics.DataFrameNameMapping = None
+    self._groups: semantics.GroupSemantics = None
+    self._periods: semantics.PeriodSemantics = None
 
-    self._target = None
-    self._data = None
-    self._analysis_data = None
+    self._target: str = None
+    self._data: pd.DataFrame = None
+    self._analysis_data: pd.DataFrame = None
 
-    self._diagnostics = {
-        'corr_test': None,
-        'noisy_geos': None,
-        'enough_data': None,
-        'pretest_start': None,
-        'outlier_dates': None
-    }
+    self._diagnostics = {diagnostic: None for diagnostic in diagnostics}
     self._tests_passed = None
 
   def tests_passed(self):
@@ -76,9 +75,7 @@ class TBRDiagnostics(object):
       A dictionary with the results of the diagnostic test and the accompanying
       information, containing the following keys and values:
       corr_test: (bool) True if and only if the correlation test passed.
-      enough_data: (bool) True if and only if a long enough stable data set
-        was found.
-      pretest_start: (datetime) Start of the stable pre-test period.
+      noisy_geos: (list) Geos that are detected as noisy.
       outlier_dates: (list) Dates that are detected as outliers.
     """
     return self._diagnostics.copy()
@@ -202,10 +199,13 @@ class TBRDiagnostics(object):
     Returns:
       True if and only if the test passes.
     """
-
     n = self._analysis_data.shape[0]
     min_threshold = self._min_correlation_threshold(n, min_cor, credible_level)
     return self.obs_cor() >= max(prefer_cor, min_threshold)
+
+  def _detect_zero_dates(self):
+    """Detects dates with zero response in both groups."""
+    return self._analysis_data.query('x <= 0 and y <= 0').index.tolist()
 
   def _detect_outliers(self, max_prob):
     """Detects outlier time points.
@@ -214,26 +214,32 @@ class TBRDiagnostics(object):
     outliers.
 
     Args:
-      max_prob: (float between 0 and 1) Maximum acceptable probability of
-        having observed percentile of maximum studentized residual be greater
-        than the reference distribution.
+      max_prob: (float between 0 and 1) Maximum acceptable probability of having
+        observed percentile of maximum studentized residual be greater than the
+        reference distribution.
 
     Returns:
       A list of dates (in the data set) that were detected to be outliers.
     """
     excluded_dates = []
-    if self._correlation_test(min_cor=0.5, prefer_cor=0.8, credible_level=0.95):
+    # check for a minimum correlation to avoid issues with NaN residuals.
+    # the minimum correlation needs to be something small but greater than 0.
+    if self._correlation_test(
+        min_cor=0.01, prefer_cor=0.05, credible_level=0.95
+    ):
       while True:
         data_subset = self._analysis_data.drop(excluded_dates)
-        if data_subset.shape[0] == 0:
+        pretest_len = data_subset.shape[0]
+        if pretest_len <= 3:  # Degree of freedom in t test must be positive.
           break
         reg_fit = smf.ols('y ~ x', data=data_subset).fit()
         absresid = abs(OLSInfluence(reg_fit).get_resid_studentized_external())
-        pretest_len = data_subset.shape[0] - len(excluded_dates)
+        # The smallest p-value will follow a Beta distribution under the null,
+        # assuming none of the dates are outliers.
         beta_quantile = stats.beta.ppf(1 - max_prob, pretest_len, 1)
         threshold = stats.t.ppf((1 + beta_quantile) / 2, df=pretest_len - 3)
         max_resid = max(absresid)
-        if max_resid < threshold:
+        if max_resid < threshold:  # Cannot remove any more dates.
           break
         exclude_date = list(data_subset.index[absresid == max_resid])
         excluded_dates.extend(exclude_date)
@@ -301,8 +307,12 @@ class TBRDiagnostics(object):
       else:
         correlations[geo_id] = corr
 
-    corr_bound = self._correlation_bound(list(correlations.values()),
-                                         iqr_coef=iqr_coef)
+    # If correlations is empty, set to max_threshold.
+    corr_bound = (
+        self._correlation_bound(list(correlations.values()), iqr_coef=iqr_coef)
+        if correlations
+        else max_threshold
+    )
     threshold = min(max_threshold, corr_bound)
 
     for geo_id in correlations:
@@ -316,8 +326,7 @@ class TBRDiagnostics(object):
 
     This method executes the following diagnostics: (1) detect and remove the
     disrupted geos; (2) detect and remove the outlier time points (3)
-    correlation test and (4) the structural stability (A/A) test removing part
-    of the pre-test period. The results of these diagnostics are stored in the
+    correlation test. The results of these diagnostics are stored in the
     _test_results attribute. The resulting modified data frame is stored in the
     _data attribute and accessible via the get_data() method.
 
@@ -360,24 +369,38 @@ class TBRDiagnostics(object):
       target = self._df_names.response
     self._target = target
 
-    remove_geos = self._detect_noisy_geos(iqr_coef=1.5, max_threshold=0.5)
-
-    self._diagnostics['noisy_geos'] = remove_geos
-
-    if remove_geos:
-      exclude = self._data[self._df_names.geo].isin(remove_geos)
-      self._data = self._data[~ exclude]
-
+    diagnostics_types = self._diagnostics.keys()
     self._create_analysis_data()
 
-    remove_dates = self._detect_outliers(max_prob=0.1)
-    self._diagnostics['outlier_dates'] = remove_dates
+    if 'noisy_geos' in diagnostics_types:
+      remove_geos = self._detect_noisy_geos(iqr_coef=1.5, max_threshold=0.5)
+      self._diagnostics['noisy_geos'] = remove_geos
 
-    if remove_dates:
-      exclude_dates = self._data[self._df_names.date].isin(remove_dates)
-      self._data = self._data[~ exclude_dates]
-      self._create_analysis_data()
+      if remove_geos:
+        exclude = self._data[self._df_names.geo].isin(remove_geos)
+        self._data = self._data[~ exclude]
+        self._create_analysis_data()
 
-    self._diagnostics['corr_test'] = self._correlation_test(min_cor=0.5,
-                                                            prefer_cor=0.8,
-                                                            credible_level=0.95)
+    if 'zero_dates' in diagnostics_types:
+      remove_dates = self._detect_zero_dates()
+      self._diagnostics['zero_dates'] = remove_dates
+
+      if remove_dates:
+        exclude_dates = self._data[self._df_names.date].isin(remove_dates)
+        self._data = self._data[~ exclude_dates]
+        self._create_analysis_data()
+
+    if 'outlier_dates' in diagnostics_types:
+      remove_dates = self._detect_outliers(max_prob=0.1)
+      self._diagnostics['outlier_dates'] = remove_dates
+
+      if remove_dates:
+        exclude_dates = self._data[self._df_names.date].isin(remove_dates)
+        self._data = self._data[~ exclude_dates]
+        self._create_analysis_data()
+
+    if 'corr_test' in diagnostics_types:
+      self._diagnostics['corr_test'] = self._correlation_test(
+          min_cor=0.5,
+          prefer_cor=0.8,
+          credible_level=0.95)

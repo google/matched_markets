@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""TBR Matched Markets preanalysis.
-"""
+"""TBR Matched Markets preanalysis."""
+
 import copy
 import itertools
-from typing import Generator, List, Set, Text, TypeVar
+import timeit
+from typing import Generator, List, Optional, Set, Text, TypeVar
 
 from matched_markets.methodology import geoeligibility
 from matched_markets.methodology import heapdict
@@ -39,8 +40,8 @@ GeoIndex = int
 DictKey = TypeVar('DictKey', str, int, float)
 
 
-class TBRMatchedMarkets:
-  """TBR Matched Market preanalysis.
+class TBRMMDesignBase:
+  """Base class for TBR Matched Market design.
 
   Attributes:
     data: The TBRMMData object.
@@ -52,26 +53,42 @@ class TBRMatchedMarkets:
   parameters: TBRMMDesignParameters
   geo_req_impact: pd.Series
 
-  def __init__(self, data: TBRMMData, parameters: TBRMMDesignParameters):
-    """Initialize a TBRMatchedMarkets object.
+  def __init__(
+      self,
+      data: TBRMMData,
+      parameters: TBRMMDesignParameters,
+      use_holdout: bool = False,
+      timeout: Optional[int] = None,
+  ):
+    """Initialize a object for finding a TBRMM design.
 
     Args:
       data: A TBRMMData object.
       parameters: a TBRMMDesignParameters object.
+      use_holdout: Whether to use holdout data for the design.
+      timeout: The timeout in seconds for finding the design. When the value is
+        None, there is no timeout limit.
     """
 
     def estimate_required_impact(y):
-      return TBRMMDiagnostics(y,
-                              parameters).estimate_required_impact(
-                                  parameters.rho_max)
+      return TBRMMDiagnostics(y, parameters).estimate_required_impact(
+          parameters.rho_max
+      )
+
     # Consider only the most recent n_pretest_max time points
-    data.df = data.df.iloc[:, -parameters.n_pretest_max:]
+    data.df = data.df.iloc[:, -parameters.n_pretest_max :]
     # Calculate the required impact estimates for each geo.
     geo_req_impact = data.df.apply(estimate_required_impact, axis=1)
 
     self.geo_req_impact = geo_req_impact
     self.data = data
     self.parameters = parameters
+    self._use_holdout = use_holdout
+    self._diagnostics_type = (
+        tbrmmdiagnostics.DiagnosticsType.TRAINING if use_holdout else None
+    )
+    self._timeout = timeout
+    self._search_results = heapdict.HeapDict(size=self.parameters.n_designs)
 
   @property
   def geos_over_budget(self) -> Set[GeoID]:
@@ -96,6 +113,11 @@ class TBRMatchedMarkets:
     return geos
 
   @property
+  def geos_too_small(self) -> Set[GeoID]:
+    """Identify geos that are too small of the market share."""
+    return set()
+
+  @property
   def geos_must_include(self) -> Set[GeoID]:
     """Set of geos that must be included in each design."""
     geo_assignments = self.data.geo_eligibility.get_eligible_assignments()
@@ -106,17 +128,23 @@ class TBRMatchedMarkets:
     """Set of geos that are within the geo-specific constraints.
 
     Returns:
-      Geos that are assignable to control or treatment but not over budget nor
-      too large, plus those that must be assigned to the treatment or control
-      group (even if over budget or too large). If the maximum number is
-      specified, the geos with the highest impact on budget are chosen.
+      Geos that are assignable to control or treatment but not over budget, too
+      large, or too small, plus those that must be assigned to the treatment or
+      control group (even if over budget, too large, or too small). If the
+      maximum number is specified, the geos with the highest impact on budget
+      are chosen.
     """
-    geos_exceed_size = self.geos_too_large | self.geos_over_budget
-    geos = (self.data.assignable - geos_exceed_size) | self.geos_must_include
+    geos_exceed_constraints = (
+        self.geos_too_large | self.geos_over_budget | self.geos_too_small
+    )
+    geos = (
+        self.data.assignable - geos_exceed_constraints
+    ) | self.geos_must_include
     n_geos_max = self.parameters.n_geos_max
     if n_geos_max is not None and len(geos) > n_geos_max:
       geos_with_max_impact = list(
-          self.geo_req_impact.sort_values(ascending=False).index)
+          self.geo_req_impact.sort_values(ascending=False).index
+      )
       geos_in_order = list(geo for geo in geos_with_max_impact if geo in geos)
       geos = set(geos_in_order[:n_geos_max])
     return geos
@@ -133,6 +161,130 @@ class TBRMatchedMarkets:
 
     self.data.geo_index = geo_index
     return self.data.geo_assignments
+
+  def search_results(self):
+    """Outputs the results of the exhaustive search in a friendly format.
+
+    Returns:
+      results: the set of feasible designs found given the design parameters,
+        with their corresponding treatment/control groups and score.
+    """
+    result = copy.deepcopy(self._search_results.get_result())
+    output_result = []
+    if result:
+      design = result[0]
+      # map from geo indices to geo IDs.
+      for d in design:
+        treatment_geos = {self.data.geo_index[x] for x in d.treatment_geos}
+        control_geos = {self.data.geo_index[x] for x in d.control_geos}
+        d.treatment_geos = treatment_geos
+        d.control_geos = control_geos
+        output_result.append(d)
+
+    return output_result
+
+  @staticmethod
+  def _constraint_not_satisfied(
+      parameter_value: float, constraint_lower: float, constraint_upper: float
+  ) -> bool:
+    """Checks if the parameter value is in the interval [constraint_lower, constraint_upper]."""
+    return (parameter_value < constraint_lower) | (
+        parameter_value > constraint_upper
+    )
+
+  def design_within_constraints(
+      self, treatment_geos: Set[GeoIndex], control_geos: Set[GeoIndex]
+  ):
+    """Checks if a set of control/treatment geos passes all constraints.
+
+    Given a set of control and treatment geos we verify that some of their
+    metrics are within the bounds specified in TBRMMDesignParameters.
+
+    Args:
+      treatment_geos: Set of geo indices referring to the geos in treatment.
+      control_geos: Set of geo indices referring to the geos in control.
+
+    Returns:
+      False if any specified constraint is not satisfied.
+    """
+
+    if self.parameters.treatment_geos_range is not None:
+      num_treatment_geos = len(treatment_geos)
+      if self._constraint_not_satisfied(
+          num_treatment_geos,
+          self.parameters.treatment_geos_range[0],
+          self.parameters.treatment_geos_range[1],
+      ):
+        return False
+
+    if self.parameters.control_geos_range is not None:
+      num_control_geos = len(control_geos)
+      if self._constraint_not_satisfied(
+          num_control_geos,
+          self.parameters.control_geos_range[0],
+          self.parameters.control_geos_range[1],
+      ):
+        return False
+
+    if self.parameters.geo_ratio_tolerance is not None:
+      geo_ratio = len(control_geos) / len(treatment_geos)
+      if self._constraint_not_satisfied(
+          geo_ratio,
+          1 / (1 + self.parameters.geo_ratio_tolerance),
+          1 + self.parameters.geo_ratio_tolerance,
+      ):
+        return False
+
+    if self.parameters.treatment_share_range is not None:
+      treatment_response_share = self.data.aggregate_geo_share(
+          treatment_geos
+      ) / self.data.aggregate_geo_share(self.geo_assignments.all)
+      if self._constraint_not_satisfied(
+          treatment_response_share,
+          self.parameters.treatment_share_range[0],
+          self.parameters.treatment_share_range[1],
+      ):
+        return False
+
+    if self.parameters.control_share_range is not None:
+      control_response_share = self.data.aggregate_geo_share(
+          control_geos
+      ) / self.data.aggregate_geo_share(self.geo_assignments.all)
+      if self._constraint_not_satisfied(
+          control_response_share,
+          self.parameters.control_share_range[0],
+          self.parameters.control_share_range[1],
+      ):
+        return False
+
+    if self.parameters.excluded_share_range is not None:
+      non_excluded_response_share = self.data.aggregate_geo_share(
+          treatment_geos | control_geos
+      ) / self.data.aggregate_geo_share(self.geo_assignments.all)
+      excluded_response_share = 1 - non_excluded_response_share
+      if self._constraint_not_satisfied(
+          excluded_response_share,
+          self.parameters.excluded_share_range[0],
+          self.parameters.excluded_share_range[1],
+      ):
+        return False
+
+    if self.parameters.volume_ratio_tolerance is not None:
+      volume_ratio = self.data.aggregate_geo_share(
+          control_geos
+      ) / self.data.aggregate_geo_share(treatment_geos)
+      if self._constraint_not_satisfied(
+          volume_ratio,
+          1 / (1 + self.parameters.volume_ratio_tolerance),
+          1 + self.parameters.volume_ratio_tolerance,
+      ):
+        return False
+
+    return True
+
+
+class TBRMatchedMarkets(TBRMMDesignBase):
+  """TBR Matched Market preanalysis."""
 
   def treatment_group_size_range(self) -> range:
     """Range from smallest to largest possible treatment group size."""
@@ -153,8 +305,8 @@ class TBRMatchedMarkets:
     return range(n_geos_from, n_geos_to + 1)
 
   def _control_group_size_generator(
-      self,
-      n_treatment_geos: int) -> Generator[int, None, None]:
+      self, n_treatment_geos: int
+  ) -> Generator[int, None, None]:
     """Acceptable control group sizes, given treatment group size.
 
     Args:
@@ -184,8 +336,8 @@ class TBRMatchedMarkets:
           yield n_control_geos
 
   def treatment_group_generator(
-      self,
-      n: int) -> Generator[Set[GeoIndex], None, None]:
+      self, n: int
+  ) -> Generator[Set[GeoIndex], None, None]:
     """Generates all possible treatment groups of given size.
 
     The indices will generated in the order from smallest to largest, e.g.,
@@ -219,13 +371,13 @@ class TBRMatchedMarkets:
         yield treatment_group  # pytype: disable=bad-return-type
 
   def control_group_generator(
-      self,
-      treatment_group: Set[GeoIndex]) -> Generator[Set[GeoIndex], None, None]:
+      self, treatment_group: Set[GeoIndex]
+  ) -> Generator[Set[GeoIndex], None, None]:
     """Iterates over control geo combinations, given a treatment group.
 
     Args:
       treatment_group: Set of treatment geos. The sequence of control groups is
-      constructed from the remaining geos.
+        constructed from the remaining geos.
 
     Yields:
       Sets of geo indices representing control groups. If there are not enough
@@ -238,8 +390,7 @@ class TBRMatchedMarkets:
     invalid_geo_indices = treatment_group - self.geo_assignments.t
     if invalid_geo_indices:
       geos = [str(geo_index) for geo_index in sorted(invalid_geo_indices)]
-      raise ValueError(
-          'Invalid treatment geo indices: ' + ', '.join(geos))
+      raise ValueError('Invalid treatment geo indices: ' + ', '.join(geos))
 
     # The fixed control geos are those that belong to either 'c_fixed' or 'ct'.
     # The geos in the group 'ct' must be assigned to control or treatment, but
@@ -346,7 +497,7 @@ class TBRMatchedMarkets:
     for treatment_group_size in treatment_group_sizes:
 
       # Treatment groups are saved for the purpose of the inclusion check.
-      save_treatment_groups = (treatment_group_size != skip_this_trt_group_size)
+      save_treatment_groups = treatment_group_size != skip_this_trt_group_size
 
       treatment_groups = self.treatment_group_generator(treatment_group_size)
       for treatment_group in treatment_groups:
@@ -354,15 +505,17 @@ class TBRMatchedMarkets:
         if treatment_share_range is not None:
           # Skip this treatment group if the group implies too low or high share
           # of response volume.
-          if (treatment_share > treatment_share_range[1] or
-              treatment_share < treatment_share_range[0]):
+          if (
+              treatment_share > treatment_share_range[1]
+              or treatment_share < treatment_share_range[0]
+          ):
             continue
         elif skip_if_subset(treatment_group):
           # If the group is a superset of a group that we already know has too
           # high a share or budget, then skip this group too.
           continue
         y = self.data.aggregate_time_series(treatment_group)
-        diag = TBRMMDiagnostics(y, self.parameters)
+        diag = TBRMMDiagnostics(y, self.parameters, self._diagnostics_type)
         req_impact = diag.estimate_required_impact(self.parameters.rho_max)
         req_budget = req_impact / self.parameters.iroas
         if budget_range is not None:
@@ -387,8 +540,11 @@ class TBRMatchedMarkets:
           corr = diag.corr  # pylint: disable=unused-variable
           req_impact = diag.required_impact
           req_budget = req_impact / self.parameters.iroas
-          if (budget_range is not None and (self._constraint_not_satisfied(
-              req_budget, budget_range[0], budget_range[1]))):
+          if budget_range is not None and (
+              self._constraint_not_satisfied(
+                  req_budget, budget_range[0], budget_range[1]
+              )
+          ):
             continue
 
           # deepcopy is needed otherwise diag.corr gets overwritten, and so
@@ -405,97 +561,12 @@ class TBRMatchedMarkets:
           # deepcopy is needed otherwise diag.corr gets overwritten, and so
           # it will not be equal to diag.score.score.corr for some reason
           design = TBRMMDesign(
-              design_score, treatment_group, control_group,
-              copy.deepcopy(diag))
+              design_score, treatment_group, control_group, copy.deepcopy(diag)
+          )
           results.push(0, design)
 
     self._search_results = results
     return self.search_results()
-
-  def search_results(self):
-    """Outputs the results of the exhaustive search in a friendly format.
-
-    Returns:
-      results: the set of feasible designs found given the design parameters,
-        with their corresponding treatment/control groups and score.
-
-    """
-    result = self._search_results.get_result()
-    output_result = []
-    if result:
-      design = result[0]
-      # map from geo indices to geo IDs.
-      for d in design:
-        treatment_geos = {self.data.geo_index[x] for x in d.treatment_geos}
-        control_geos = {self.data.geo_index[x] for x in d.control_geos}
-        d.treatment_geos = treatment_geos
-        d.control_geos = control_geos
-        output_result.append(d)
-
-    return output_result
-
-  @staticmethod
-  def _constraint_not_satisfied(parameter_value: float,
-                                constraint_lower: float,
-                                constraint_upper: float) -> bool:
-    """Checks if the parameter value is in the interval [constraint_lower, constraint_upper]."""
-    return (parameter_value < constraint_lower) | (
-        parameter_value > constraint_upper)
-
-  def design_within_constraints(self, treatment_geos: Set[GeoIndex],
-                                control_geos: Set[GeoIndex]):
-    """Checks if a set of control/treatment geos passes all constraints.
-
-    Given a set of control and treatment geos we verify that some of their
-    metrics are within the bounds specified in TBRMMDesignParameters.
-
-    Args:
-      treatment_geos: Set of geo indices referring to the geos in treatment.
-      control_geos: Set of geo indices referring to the geos in control.
-
-    Returns:
-      False if any specified constraint is not satisfied.
-    """
-    if self.parameters.volume_ratio_tolerance is not None:
-      volume_ratio = (
-          self.data.aggregate_geo_share(control_geos)/
-          self.data.aggregate_geo_share(treatment_geos))
-      if self._constraint_not_satisfied(
-          volume_ratio, 1 / (1 + self.parameters.volume_ratio_tolerance),
-          1 + self.parameters.volume_ratio_tolerance):
-        return False
-
-    if self.parameters.geo_ratio_tolerance is not None:
-      geo_ratio = len(control_geos) / len(treatment_geos)
-      if self._constraint_not_satisfied(
-          geo_ratio, 1 / (1 + self.parameters.geo_ratio_tolerance),
-          1 + self.parameters.geo_ratio_tolerance):
-        return False
-
-    if self.parameters.treatment_share_range is not None:
-      treatment_response_share = self.data.aggregate_geo_share(
-          treatment_geos) / self.data.aggregate_geo_share(
-              self.geo_assignments.all)
-      if self._constraint_not_satisfied(
-          treatment_response_share, self.parameters.treatment_share_range[0],
-          self.parameters.treatment_share_range[1]):
-        return False
-
-    if self.parameters.treatment_geos_range is not None:
-      num_treatment_geos = len(treatment_geos)
-      if self._constraint_not_satisfied(
-          num_treatment_geos, self.parameters.treatment_geos_range[0],
-          self.parameters.treatment_geos_range[1]):
-        return False
-
-    if self.parameters.control_geos_range is not None:
-      num_control_geos = len(control_geos)
-      if self._constraint_not_satisfied(num_control_geos,
-                                        self.parameters.control_geos_range[0],
-                                        self.parameters.control_geos_range[1]):
-        return False
-
-    return True
 
   def greedy_search(self):
     """Searches the Matched Markets for a TBR experiment.
@@ -548,7 +619,8 @@ class TBRMatchedMarkets:
         bb_test=0,
         dw_test=0,
         corr=0,
-        inv_required_impact=0)
+        inv_required_impact=0,
+    )
     score_star = {kappa_0: tmp_score}
     group_ctl = self.geo_assignments.c
     if kappa_0 == 0:
@@ -559,17 +631,27 @@ class TBRMatchedMarkets:
       needs_matching = True
 
     k = kappa_0
-    while (k < max_treatment_size) | (needs_matching):
+    search_not_timeout = True
+    start_time = timeit.default_timer()
+
+    while ((k < max_treatment_size) | (needs_matching)) and search_not_timeout:
       # Find the best control group given the current treatment group
+      if (
+          self._timeout is not None
+          and timeit.default_timer() - start_time > self._timeout
+      ):
+        search_not_timeout = False
       if needs_matching:
         r_control = self.geo_assignments.c - (group_ctl | group_star_trt[k])
         r_unassigned = (group_ctl & self.geo_assignments.x) - group_star_trt[k]
 
         reassignable_geos = r_control | r_unassigned
         treatment_time_series = self.data.aggregate_time_series(
-            group_star_trt[k])
-        current_design = TBRMMDiagnostics(treatment_time_series,
-                                          self.parameters)
+            group_star_trt[k]
+        )
+        current_design = TBRMMDiagnostics(
+            treatment_time_series, self.parameters, self._diagnostics_type
+        )
         current_design.x = self.data.aggregate_time_series(group_ctl)
         current_score = TBRMMScore(current_design)
 
@@ -582,21 +664,29 @@ class TBRMatchedMarkets:
           # treatment (to reach a size which would pass the checks) or decrease
           # the size of control
           if (k >= self.parameters.treatment_geos_range[0]) and (
-              len(neighboring_control_group) <=
-              self.parameters.control_geos_range[1]):
+              len(neighboring_control_group)
+              <= self.parameters.control_geos_range[1]
+          ):
             if (not neighboring_control_group) or (
-                not self.design_within_constraints(group_star_trt[k],
-                                                   neighboring_control_group)):  # pytype: disable=wrong-arg-types
+                not self.design_within_constraints(
+                    group_star_trt[k], neighboring_control_group
+                )
+            ):  # pytype: disable=wrong-arg-types
               continue
 
           neighbor_design = tbrmmdiagnostics.TBRMMDiagnostics(
-              treatment_time_series, self.parameters)
+              treatment_time_series, self.parameters, self._diagnostics_type
+          )
           neighbor_design.x = self.data.aggregate_time_series(
-              neighboring_control_group)
+              neighboring_control_group
+          )
           req_impact = neighbor_design.required_impact
           req_budget = req_impact / self.parameters.iroas
-          if (budget_range is not None) and (self._constraint_not_satisfied(
-              req_budget, budget_range[0], budget_range[1])):
+          if (budget_range is not None) and (
+              self._constraint_not_satisfied(
+                  req_budget, budget_range[0], budget_range[1]
+              )
+          ):
             continue
 
           score = TBRMMScore(neighbor_design)
@@ -621,22 +711,31 @@ class TBRMatchedMarkets:
           updated_control_group = group_star_ctl[k] - set([geo])
           # see comment on lines 566-567 for the same if statement
           if (k >= self.parameters.treatment_geos_range[0]) and (
-              len(updated_control_group) <=
-              self.parameters.control_geos_range[1]):
+              len(updated_control_group)
+              <= self.parameters.control_geos_range[1]
+          ):
             if (not updated_control_group) or (
-                not self.design_within_constraints(augmented_treatment_group,
-                                                   updated_control_group)):
+                not self.design_within_constraints(
+                    augmented_treatment_group, updated_control_group
+                )
+            ):
               continue
           treatment_time_series = self.data.aggregate_time_series(
-              augmented_treatment_group)
+              augmented_treatment_group
+          )
           neighbor_design = TBRMMDiagnostics(
-              treatment_time_series, self.parameters)
+              treatment_time_series, self.parameters, self._diagnostics_type
+          )
           neighbor_design.x = self.data.aggregate_time_series(
-              updated_control_group)
+              updated_control_group
+          )
           req_impact = neighbor_design.required_impact
           req_budget = req_impact / self.parameters.iroas
-          if (budget_range is not None) and (self._constraint_not_satisfied(
-              req_budget, budget_range[0], budget_range[1])):
+          if (budget_range is not None) and (
+              self._constraint_not_satisfied(
+                  req_budget, budget_range[0], budget_range[1]
+              )
+          ):
             continue
           score = TBRMMScore(neighbor_design)
           if score > current_score:
@@ -644,7 +743,7 @@ class TBRMatchedMarkets:
             group_trt = augmented_treatment_group
             current_score = score
 
-        group_star_trt[k+1] = group_trt
+        group_star_trt[k + 1] = group_trt
         k = k + 1
         needs_matching = True
 
@@ -654,14 +753,22 @@ class TBRMatchedMarkets:
     if kappa_0 > 0:
       diagnostic = TBRMMDiagnostics(
           self.data.aggregate_time_series(group_star_trt[kappa_0]),
-          self.parameters)
+          self.parameters,
+          self._diagnostics_type,
+      )
       diagnostic.x = self.data.aggregate_time_series(group_star_ctl[kappa_0])
       req_impact = diagnostic.required_impact
       req_budget = req_impact / self.parameters.iroas
-      if (not group_star_ctl[kappa_0]) or (not self.design_within_constraints(
-          group_star_trt[kappa_0], group_star_ctl[kappa_0])):
-        if (budget_range is not None) and (self._constraint_not_satisfied(
-            req_budget, budget_range[0], budget_range[1])):
+      if (not group_star_ctl[kappa_0]) or (
+          not self.design_within_constraints(
+              group_star_trt[kappa_0], group_star_ctl[kappa_0]
+          )
+      ):
+        if (budget_range is not None) and (
+            self._constraint_not_satisfied(
+                req_budget, budget_range[0], budget_range[1]
+            )
+        ):
           group_star_trt.pop(kappa_0, None)
           group_star_ctl.pop(kappa_0, None)
           score_star.pop(kappa_0, None)
@@ -672,13 +779,67 @@ class TBRMatchedMarkets:
     for k in group_star_trt:
       if self.design_within_constraints(group_star_trt[k], group_star_ctl[k]):
         design_diag = TBRMMDiagnostics(
-            self.data.aggregate_time_series(group_star_trt[k]), self.parameters)
+            self.data.aggregate_time_series(group_star_trt[k]),
+            self.parameters,
+            self._diagnostics_type,
+        )
         design_diag.x = self.data.aggregate_time_series(group_star_ctl[k])
         design_score = TBRMMScore(design_diag)
         design = TBRMMDesign(
-            design_score, group_star_trt[k], group_star_ctl[k],
-            copy.deepcopy(design_diag))
+            design_score,
+            group_star_trt[k],
+            group_star_ctl[k],
+            copy.deepcopy(design_diag),
+        )
         results.push(0, design)
 
     self._search_results = results
     return self.search_results()
+
+  # The greedy search outputs a list of designs, and then
+  # decision_tree_design.create_tbrmm_design() further filters out the designs
+  # that don't satisfy the constraints. The final chosen design is the highest
+  # score design that passes the constraints. We need this function to get the
+  # eval scores for the final chosen design. Once we add the constraints in the
+  # greedy search directly, we can just use eval_scores() and remove this
+  # function.
+  def get_design_eval_scores(self, design: TBRMMDesign) -> Optional[TBRMMScore]:
+    """Get the scores of the selected design based on the evaluation data."""
+    if not self._use_holdout:
+      return None
+
+    design_treatment_index = set(
+        self.data.geo_index.index(geo) for geo in design.treatment_geos
+    )
+    design_control_index = set(
+        self.data.geo_index.index(geo) for geo in design.control_geos
+    )
+
+    design_eval_diag = TBRMMDiagnostics(
+        self.data.aggregate_time_series(design_treatment_index),
+        self.parameters,
+        tbrmmdiagnostics.DiagnosticsType.EVAL,
+    )
+    design_eval_diag.x = self.data.aggregate_time_series(design_control_index)
+    design_eval_score = TBRMMScore(design_eval_diag)
+
+    return design_eval_score
+
+  def eval_scores(self) -> Optional[TBRMMScore]:
+    """The scores of the selected design based on the evaluation data."""
+
+    if not self._use_holdout:
+      return None
+
+    result = self._search_results.get_result()
+    if result:
+      d = result[0][0]
+      design_eval_diag = TBRMMDiagnostics(
+          self.data.aggregate_time_series(d.treatment_geos),
+          self.parameters,
+          tbrmmdiagnostics.DiagnosticsType.EVAL,
+      )
+      design_eval_diag.x = self.data.aggregate_time_series(d.control_geos)
+      design_eval_score = TBRMMScore(design_eval_diag)
+
+      return design_eval_score

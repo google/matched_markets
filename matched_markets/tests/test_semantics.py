@@ -49,6 +49,7 @@ class SemanticsTest(unittest.TestCase):
 
     self.assertIsInstance(periods.pre, int)
     self.assertIsInstance(periods.test, int)
+    self.assertIsInstance(periods.calibration, int)
     self.assertIsInstance(periods.cooldown, int)
     self.assertIsInstance(periods.unassigned, int)
 

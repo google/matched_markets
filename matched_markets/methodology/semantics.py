@@ -113,18 +113,21 @@ class GroupSemantics(BaseSemantics):
 class PeriodSemantics(BaseSemantics):
   """Specifies the semantics for interpreting period information."""
 
-  def __init__(self, pre=0, test=1, cooldown=2, unassigned=-1):
+  def __init__(self, pre=0, test=1, cooldown=2, calibration=3, unassigned=-1):
     """Represents experimental period label semantics.
 
     Args:
       pre: int. Label for ticks in the pre-test phase.
       test: int. Label for ticks in the test phase.
       cooldown: int. Label for ticks in cooldown phase.
+      calibration: int. Label for ticks in calibration phase. Note that
+        calibration is between pre and test periods.
       unassigned: int. Label for ticks present but not assigned to a phase.
     """
     self.pre = pre
     self.test = test
     self.cooldown = cooldown
+    self.calibration = calibration
     self.unassigned = unassigned
     # Set the relevant attributes to be output when printing an instance.
     BaseSemantics.__init__(self, locals())
