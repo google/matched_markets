@@ -178,7 +178,7 @@ class TBRMMDataTest(unittest.TestCase):
   def testGeoEligibilityCanBeASubsetOfGeosInData(self):
     """The geo_eligibility object can refer to a subset of geos in the data.
     """
-    geo_subset = ['1', '2', '3']
+    geo_subset = {'1', '2', '3'}
     df_geo_elig = self.geo_elig.data.loc[geo_subset]
     geo_elig = GeoEligibility(df_geo_elig)
     self.assertCountEqual(
@@ -193,7 +193,7 @@ class TBRMMDataTest(unittest.TestCase):
     df_geo_elig.loc['3'] = [0, 1, 0]  # Geo '3' must be included.
     geo_elig = GeoEligibility(df_geo_elig)
     # Extract a subset of the data with geos '0' and '1' only.
-    geo_subset = ['0', '1']
+    geo_subset = {'0', '1'}
     df_new = self.df.loc[self.df.geo.isin(geo_subset)]
     with self.assertRaisesRegex(
         ValueError,
