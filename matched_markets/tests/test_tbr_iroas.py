@@ -400,9 +400,9 @@ class TBRiROASTest(unittest.TestCase):
     test_counterfactual = counterfactual_df[counterfactual_df['date'] ==
                                             test_start_date]
     self.assertAlmostEqual(test_counterfactual['lower'].values[0],
-                           34302.50979221002, places=6)
+                           34302.50979221002)
     self.assertAlmostEqual(test_counterfactual['upper'].values[0],
-                           35918.87409473002, places=6)
+                           35918.87409473002)
     self.assertAlmostEqual(test_counterfactual['estimate'].values[0],
                            35110.69194347361)
     self.assertTrue(
@@ -420,14 +420,10 @@ class TBRiROASTest(unittest.TestCase):
     self.assertTrue(
         np.allclose(pretest_data['upper'],
                     pretest_data['estimate']))
-    self.assertAlmostEqual(test_data['lower'].values[0], 4750.63590527,
-                           places=6)
-    self.assertAlmostEqual(test_data['upper'].values[0], 6367.00020779,
-                           places=6)
-    self.assertAlmostEqual(cumulative_data['lower'].values[0], 4750.63590527,
-                           places=6)
-    self.assertAlmostEqual(cumulative_data['upper'].values[0], 6367.00020779,
-                           places=6)
+    self.assertAlmostEqual(test_data['lower'].values[0], 4750.63590527)
+    self.assertAlmostEqual(test_data['upper'].values[0], 6367.00020779)
+    self.assertAlmostEqual(cumulative_data['lower'].values[0], 4750.63590527)
+    self.assertAlmostEqual(cumulative_data['upper'].values[0], 6367.00020779)
     self.assertAlmostEqual(cumulative_data['estimate'].values[0],
                            5558.818056526405)
     self.assertAlmostEqual(
@@ -505,9 +501,9 @@ class TBRiROASTest(unittest.TestCase):
     test_counterfactual = counterfactual_df[counterfactual_df['date'] ==
                                             test_start_date]
     self.assertAlmostEqual(test_counterfactual['lower'].values[0],
-                           34302.50979221002, places=6)
+                           34302.50979221002)
     self.assertAlmostEqual(test_counterfactual['upper'].values[0],
-                           35918.87409473002, places=6)
+                           35918.87409473002)
     self.assertAlmostEqual(test_counterfactual['estimate'].values[0],
                            35110.69194347361)
     self.assertTrue(
@@ -525,14 +521,10 @@ class TBRiROASTest(unittest.TestCase):
     self.assertTrue(
         np.allclose(pretest_data['upper'],
                     pretest_data['estimate']))
-    self.assertAlmostEqual(test_data['lower'].values[0], 4750.63590527,
-                           places=6)
-    self.assertAlmostEqual(test_data['upper'].values[0], 6367.00020779,
-                           places=6)
-    self.assertAlmostEqual(cumulative_data['lower'].values[0], 4750.63590527,
-                           places=6)
-    self.assertAlmostEqual(cumulative_data['upper'].values[0], 6367.00020779,
-                           places=6)
+    self.assertAlmostEqual(test_data['lower'].values[0], 4750.63590527)
+    self.assertAlmostEqual(test_data['upper'].values[0], 6367.00020779)
+    self.assertAlmostEqual(cumulative_data['lower'].values[0], 4750.63590527)
+    self.assertAlmostEqual(cumulative_data['upper'].values[0], 6367.00020779)
     self.assertAlmostEqual(cumulative_data['estimate'].values[0],
                            5558.818056526405)
     self.assertAlmostEqual(
