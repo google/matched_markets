@@ -1,6 +1,4 @@
-package(
-    default_visibility = ["//visibility:public"],
-)
+package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])
 
@@ -16,6 +14,7 @@ py_library(
         "csv/geoassignment.csv",
         "csv/salesandcost.csv",
     ],
+    srcs_version = "PY3",
     deps = [":geoexperiments"],
 )
 
@@ -30,21 +29,21 @@ py_test(
         "csv/geoassignment.csv",
         "csv/salesandcost.csv",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
 )
 
 py_library(
     name = "geoexperiments",
     srcs = [
-        "methodology/base.py",
         "methodology/common_classes.py",
-        "methodology/robust.py",
-        "methodology/robust_iroas.py",
         "methodology/semantics.py",
         "methodology/tbr.py",
         "methodology/tbr_iroas.py",
         "methodology/tbrdiagnostics.py",
         "methodology/utils.py",
     ],
+    srcs_version = "PY3",
     visibility = ["//visibility:public"],
 )
 
@@ -54,22 +53,11 @@ py_test(
     srcs = [
         "tests/test_tbr.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [
         ":examples",
         ":geoexperiments",
-    ],
-)
-
-py_test(
-    name = "test_robust",
-    size = "medium",
-    srcs = [
-        "tests/test_robust.py",
-    ],
-    deps = [
-        ":examples",
-        ":geoexperiments",
-        "//testing/pybase:parameterized",
     ],
 )
 
@@ -79,22 +67,11 @@ py_test(
     srcs = [
         "tests/test_tbr_iroas.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [
         ":examples",
         ":geoexperiments",
-    ],
-)
-
-py_test(
-    name = "test_robust_iroas",
-    size = "medium",
-    srcs = [
-        "tests/test_robust_iroas.py",
-    ],
-    deps = [
-        ":examples",
-        ":geoexperiments",
-        "//testing/pybase:parameterized",
     ],
 )
 
@@ -105,6 +82,8 @@ py_test(
         "methodology/semantics.py",
         "tests/test_semantics.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
 )
 
 py_test(
@@ -113,6 +92,8 @@ py_test(
     srcs = [
         "tests/test_data_simulator.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":examples"],
 )
 
@@ -124,6 +105,7 @@ py_library(
     data = [
         "csv/geoxdiag_data.csv",
     ],
+    srcs_version = "PY3",
 )
 
 py_test(
@@ -132,6 +114,8 @@ py_test(
     srcs = [
         "tests/test_geoxdiag_data.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":geoxdiag_data"],
 )
 
@@ -145,6 +129,8 @@ py_test(
     data = [
         "csv/outlier_dataset.csv",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [
         ":geoexperiments",
         ":geoxdiag_data",
@@ -157,6 +143,8 @@ py_test(
     srcs = [
         "tests/test_utils.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":geoexperiments"],
 )
 
@@ -166,13 +154,13 @@ py_library(
         "methodology/geoeligibility.py",
         "methodology/heapdict.py",
         "methodology/tbrmatchedmarkets.py",
-        "methodology/tbrmatchedmarkets_v2.py",
         "methodology/tbrmmdata.py",
         "methodology/tbrmmdesign.py",
         "methodology/tbrmmdesignparameters.py",
         "methodology/tbrmmdiagnostics.py",
         "methodology/tbrmmscore.py",
     ],
+    srcs_version = "PY3",
     visibility = ["//visibility:public"],
 )
 
@@ -186,6 +174,8 @@ py_test(
     data = [
         "csv/salesandcost.csv",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -199,6 +189,8 @@ py_test(
     data = [
         "csv/salesandcost.csv",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -209,6 +201,8 @@ py_test(
     srcs = [
         "tests/test_tbrmatchedmarkets3.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -219,6 +213,8 @@ py_test(
     srcs = [
         "tests/test_tbrmmscore.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -229,6 +225,8 @@ py_test(
     srcs = [
         "tests/test_geoeligibility.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -239,6 +237,8 @@ py_test(
     srcs = [
         "tests/test_tbrmmdesign.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -249,6 +249,8 @@ py_test(
     srcs = [
         "tests/test_tbrmmdesignparameters.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -258,6 +260,8 @@ py_test(
     srcs = [
         "tests/test_heapdict.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -268,10 +272,9 @@ py_test(
     srcs = [
         "tests/test_tbrmmdiagnostics.py",
     ],
-    deps = [
-        ":tbrmatchedmarkets",
-        "//testing/pybase:parameterized",
-    ],
+    python_version = "PY3",
+    srcs_version = "PY3",
+    deps = [":tbrmatchedmarkets"],
 )
 
 py_test(
@@ -281,6 +284,8 @@ py_test(
     srcs = [
         "tests/test_tbrmmdata.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":tbrmatchedmarkets"],
 )
 
@@ -290,5 +295,7 @@ py_test(
     srcs = [
         "tests/test_common_classes.py",
     ],
+    python_version = "PY3",
+    srcs_version = "PY3",
     deps = [":geoexperiments"],
 )
