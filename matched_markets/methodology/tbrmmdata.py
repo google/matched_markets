@@ -14,8 +14,7 @@
 # ============================================================================
 """TBR Matched Markets: TBRMMData class.
 """
-import functools
-from typing import FrozenSet, List, Optional, Set, Text, Tuple, Union
+from typing import List, Optional, Set, Text, Tuple, Union
 
 from matched_markets.methodology import geoeligibility
 
@@ -28,11 +27,9 @@ GeoIndex = int
 GeoRef = Union[GeoID, GeoIndex]
 OrderedGeos = Union[List[GeoRef], Tuple[GeoRef]]
 GeoIndexSet = Set[GeoIndex]
-GeoIndexFrozenSet = FrozenSet[GeoIndex]
 Vector = List[float]
 GeoEligibility = geoeligibility.GeoEligibility
 GeoAssignments = geoeligibility.GeoAssignments
-CACHE_SIZE = 10000
 
 
 class TBRMMData:
@@ -112,7 +109,7 @@ class TBRMMData:
                         fill_value=0)
 
     # Calculate the average 'market share' based on all data.
-    geo_means = df.mean(axis=1).sort_values(ascending=False)  # pytype: disable=attribute-error  # pandas-drop-duplicates-overloads
+    geo_means = df.mean(axis=1).sort_values(ascending=False)
     geo_share = geo_means / sum(geo_means)
     geos_in_data = set(geo_means.index)
 
@@ -143,7 +140,7 @@ class TBRMMData:
       if geos_missing:
         raise ValueError('Required geos {} were not found '
                          'in the data'.format(sorted(geos_missing)))
-      df_elig = geo_eligibility.data.loc[list(common_geos)]
+      df_elig = geo_eligibility.data.loc[common_geos]
       geo_eligibility = GeoEligibility(df_elig)
       geo_assignments = geo_eligibility.get_eligible_assignments()
 
@@ -182,12 +179,8 @@ class TBRMMData:
         indices=True)
 
     self._geo_index = geos
-    self._array = self.df.loc[list(geos)].to_numpy()
-    self._array_geo_share = np.array(self.geo_share[list(geos)])
-
-  @functools.lru_cache(maxsize=CACHE_SIZE)
-  def _aggregate_time_series(self, geo_indices: GeoIndexFrozenSet) -> Vector:
-    return self._array[list(geo_indices)].sum(axis=0)
+    self._array = self.df.loc[geos].to_numpy()
+    self._array_geo_share = np.array(self.geo_share[geos])
 
   def aggregate_time_series(self, geo_indices: GeoIndexSet) -> Vector:
     """Return the aggregate the time series over a set of chosen geos.
@@ -200,11 +193,7 @@ class TBRMMData:
        A time series representing the sum of the geos indicated by
       'geo_indices'.
     """
-    return self._aggregate_time_series(frozenset(geo_indices))
-
-  @functools.lru_cache(maxsize=CACHE_SIZE)
-  def _aggregate_geo_share(self, geo_indices: GeoIndexFrozenSet) -> float:
-    return self._array_geo_share[list(geo_indices)].sum()
+    return self._array[list(geo_indices)].sum(axis=0)
 
   def aggregate_geo_share(self, geo_indices: GeoIndexSet) -> float:
     """Share of the given geos' response as percentage of the total.
@@ -216,7 +205,7 @@ class TBRMMData:
     Returns:
        Aggregate share of geos indicated by 'geo_indices'.
     """
-    return self._aggregate_geo_share(frozenset(geo_indices))
+    return self._array_geo_share[list(geo_indices)].sum()
 
   @property
   def leave_one_out_correlations(self) -> pd.Series:
