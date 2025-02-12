@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""TBR Matched Markets preanalysis."""
-
+"""TBR Matched Markets preanalysis.
+"""
 import collections
-import enum
 import functools
 from typing import List, Optional
 
@@ -25,25 +24,15 @@ from scipy import stats
 
 TBRMMDesignParameters = tbrmmdesignparameters.TBRMMDesignParameters
 Vector = List[float]
-LinregResult = collections.namedtuple(
-    'LinregResult', ['a', 'b', 'sigma', 'resid']
-)
-AATestResult = collections.namedtuple(
-    'AATestResult', ['test_ok', 'bounds', 'prob']
-)
-BBTestResult = collections.namedtuple(
-    'BBTestResult', ['test_ok', 'abscumresid', 'bounds']
-)
+LinregResult = collections.namedtuple('LinregResult',
+                                      ['a', 'b', 'sigma', 'resid'])
+AATestResult = collections.namedtuple('AATestResult',
+                                      ['test_ok', 'bounds', 'prob'])
+BBTestResult = collections.namedtuple('BBTestResult',
+                                      ['test_ok', 'abscumresid', 'bounds'])
 DWTestResult = collections.namedtuple('DWTestResult', ['test_ok', 'dwstat'])
-TBRFit = collections.namedtuple(
-    'TBRFit', ['estimate', 'cihw', 'sigma', 'scale']
-)
-
-
-@enum.unique
-class DiagnosticsType(enum.Enum):
-  TRAINING = 1
-  EVAL = 2
+TBRFit = collections.namedtuple('TBRFit',
+                                ['estimate', 'cihw', 'sigma', 'scale'])
 
 
 class TBRMMDiagnostics:
@@ -117,10 +106,6 @@ class TBRMMDiagnostics:
     tests_ok: True if and only if all tests pass. None if tests have not been
       run.
   """
-
-  # TBRMMDesignParameters object.
-  _par: TBRMMDesignParameters
-
   # Minimum required number of timepoints in x, y.
   _min_timepoints = 3
   # Brownian Bridge bound multiplier for the TBR stability check.
@@ -138,26 +123,20 @@ class TBRMMDiagnostics:
   _aatest = None  # A/A Test result.
   _bbtest = None  # Brownian Bridge test.
   _dwtest = None  # Durbin-Watson test result.
+  _par = None  # TBRMMDesignParameters object.
   _tests_ok = None  # True iff all tests pass.
   _y_mean = None  # Mean of y.
   _x_mean = None  # Mean of x.
 
-  def __init__(
-      self,
-      y: Vector,
-      par: TBRMMDesignParameters,
-      diagnostics_type: Optional[DiagnosticsType] = None,
-  ):
+  def __init__(self, y: Vector, par: TBRMMDesignParameters):
     """Initializes the object.
 
     Args:
       y: Vector of floats. Treatment group time series.
       par: A TBRDesignParameters object.
-      diagnostics_type: The type of diagnostics to run.
     """
-    self._diagnostics_type = diagnostics_type
-    self._par = par
     self.y = y
+    self._par = par
 
   @property
   def y(self):
@@ -165,10 +144,7 @@ class TBRMMDiagnostics:
 
   @y.setter
   def y(self, value: Vector):
-    if self._diagnostics_type == DiagnosticsType.TRAINING:
-      y = np.array(value[: -self._par.n_test])
-    else:
-      y = np.array(value)
+    y = np.array(value)
     if y.ndim != 1:
       raise ValueError('y must be a one-dimensional vector')
     if len(y) < self._min_timepoints:
@@ -183,15 +159,11 @@ class TBRMMDiagnostics:
 
   @x.setter
   def x(self, value: Vector):
-    assert self._y is not None
     if value is None:
       x = None
       self._x_mean = None
     else:
-      if self._diagnostics_type == DiagnosticsType.TRAINING:
-        x = np.array(value[: -self._par.n_test])
-      else:
-        x = np.array(value)
+      x = np.array(value)
       if x.ndim != 1:
         raise ValueError('x must be a one-dimensional vector')
       if len(x) != len(self._y):
@@ -216,11 +188,7 @@ class TBRMMDiagnostics:
       return None
 
     if self._corr is None:
-      if self._diagnostics_type == DiagnosticsType.EVAL:
-        x, y = self._x[-self._par.n_test :], self._y[-self._par.n_test :]
-      else:
-        x, y = self._x, self._y
-      self._corr = np.corrcoef(x, y)[0, 1]
+      self._corr = np.corrcoef(self._x, self.y)[0, 1]
     return self._corr
 
   # The cache ensures values are calculated only once to save time.
@@ -249,8 +217,7 @@ class TBRMMDiagnostics:
       n: int,
       flevel: float,
       sig_level: float,
-      power_level: float,
-  ) -> float:
+      power_level: float) -> float:
     """Estimate the required incremental impact, without the sigma term.
 
     Args:
@@ -288,17 +255,15 @@ class TBRMMDiagnostics:
       raise ValueError('corr must be between -1 and 1')
 
     par = self._par
-    if self._diagnostics_type == DiagnosticsType.EVAL:
-      y = self.y[-par.n_test :]
-    else:
-      y = self.y
-    n = len(y)
-    term = self._impact_estimate(
-        par.n_test, n, par.flevel, par.sig_level, par.power_level
-    )
-    sigma = np.std(y, ddof=2) * np.sqrt(1 - corr**2)
+    n = len(self.y)
+    term = self._impact_estimate(par.n_test,
+                                 n,
+                                 par.flevel,
+                                 par.sig_level,
+                                 par.power_level)
+    sigma = np.std(self.y, ddof=2) * np.sqrt(1 - corr ** 2)
     impact = term * sigma
-    return impact * par.impact_multiplier_factor
+    return impact
 
   @property
   def required_impact(self) -> Optional[float]:
@@ -332,13 +297,11 @@ class TBRMMDiagnostics:
       residuals), where a, b are the regression parameter estimates, sigma the
       residual standard deviation, and the non-standardized residuals.
     """
-    n_test = self._par.n_test
-    x, y = self._x, self._y
+    x = self._x
     if x is None:
       return None
     elif self._pretestfit is None:
-      if self._diagnostics_type == DiagnosticsType.EVAL:
-        x, y = self._x[-n_test:], self._y[-n_test:]
+      y = self._y
       try:
         b, a, *_ = stats.linregress(x, y)
       except ValueError:
@@ -409,20 +372,17 @@ class TBRMMDiagnostics:
     if pretestfit is None:
       return None
 
-    assert self._x is not None
     par = self._par
     n_test = par.n_test
     _, b, sigma, _ = pretestfit
     n = len(self._x)
     xn = self._x_mean
     yn = self._y_mean
-    assert xn is not None
-    assert yn is not None
     dx = xt - xn
     dy = yt - yn
     estimate = n_test * (dy - b * dx)
 
-    dv = dx**2 / np.var(self._x, ddof=0)
+    dv = dx ** 2 / np.var(self._x, ddof=0)
     tq_sig = stats.t.ppf(par.sig_level, df=n - 2)
     scale = n_test * sigma * np.sqrt((1 + dv) / n + 1 / n_test)
     cihw = tq_sig * scale
@@ -443,7 +403,7 @@ class TBRMMDiagnostics:
         return None
       resid = pretestfit.resid
       d = resid[1:] - resid[:-1]
-      dwstat = np.sum(d**2) / np.sum(resid**2)
+      dwstat = np.sum(d ** 2) / np.sum(resid ** 2)
       dw_min, dw_max = self._dw_range
       test_ok = dw_min < dwstat < dw_max
       self._dwtest = DWTestResult(test_ok, dwstat)
@@ -489,11 +449,8 @@ class TBRMMDiagnostics:
       posterior_scale = sigma * np.sqrt(1 / n_pretest + 1 / n_test)
       tq1 = tq_sig - true_mean / posterior_scale
       tq2 = -tq_sig - true_mean / posterior_scale
-      prob_sig_result = (
-          1
-          - stats.t.cdf(tq1, df=n_pretest - 2)
-          + stats.t.cdf(tq2, df=n_pretest - 2)
-      )
+      prob_sig_result = (1 - stats.t.cdf(tq1, df=n_pretest - 2) +
+                         stats.t.cdf(tq2, df=n_pretest - 2))
       ok = prob_sig_result <= self._aa_threshold_prob
 
     self._aatest = AATestResult(ok, bounds, prob_sig_result)
@@ -518,23 +475,12 @@ class TBRMMDiagnostics:
       aatest.test_ok is None.
     """
     if self._tests_ok is None:
-      if self.corr_test is None:
-        return None
-      if self.bbtest is None:
-        return None
-      if self.dwtest is None:
-        return None
-      if self.aatest is None:
-        return None
-      self._tests_ok = (
-          self.corr_test
-          and self.bbtest.test_ok
-          and self.dwtest.test_ok
-          and self.aatest.test_ok
-      )
+      self._tests_ok = (self.corr_test and
+                        self.bbtest.test_ok and
+                        self.dwtest.test_ok and
+                        self.aatest.test_ok)
     return self._tests_ok
 
   def __repr__(self):
-    return 'TBRMMDiagnostics(tests_ok={}, corr={})'.format(
-        self._tests_ok, self._corr
-    )
+    return 'TBRMMDiagnostics(tests_ok={}, corr={})'.format(self._tests_ok,
+                                                           self._corr)
