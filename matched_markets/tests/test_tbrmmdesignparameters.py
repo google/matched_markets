@@ -115,11 +115,9 @@ class DefaultsTest(TBRMMDesignParametersTest):
     self.assertIsNone(par.volume_ratio_tolerance)
     self.assertIsNone(par.geo_ratio_tolerance)
     self.assertIsNone(par.treatment_share_range)
-    self.assertIsNone(par.control_share_range)
     self.assertIsNone(par.budget_range)
     self.assertIsNone(par.treatment_geos_range)
     self.assertIsNone(par.control_geos_range)
-    self.assertIsNone(par.excluded_share_range)
     self.assertIsNone(par.n_geos_max)
     self.assertEqual(par.n_designs, 1)
     self.assertEqual(par.sig_level, 0.9)
@@ -128,7 +126,6 @@ class DefaultsTest(TBRMMDesignParametersTest):
     self.assertEqual(par.n_pretest_max, 90)
     self.assertEqual(par.rho_max, 0.995)
     self.assertEqual(par.flevel, 0.9)
-    self.assertEqual(par.impact_multiplier_factor, 1.0)
 
   def testSameInstance(self):
     """Checks that an instance is equal to itself."""
@@ -173,26 +170,6 @@ class NTestTest(TBRMMDesignParametersTest):
 
   def testValueNone(self):
     self._testBadValue(None)
-
-
-class ImpactMultiplierFactorTest(TBRMMDesignParametersTest):
-
-  name = 'impact_multiplier_factor'
-  default_error_message = r'{} must be >= 1\.0'
-
-  def testValueNonNumeric(self):
-    self._testValueNonNumeric()
-
-  def testValueNonNumeric(self):
-    self._testValueNonNumeric()
-
-  def testValueOk(self):
-    self._testValueOk(1.0)
-    self._testValueOk(2.0)
-
-  def testValueTooLow(self):
-    self._testBadValue(-0.01)
-    self._testBadValue(0.0)
 
 
 class IroasTest(TBRMMDesignParametersTest):
@@ -279,66 +256,6 @@ class TreatmentShareRangeTest(TBRMMDesignParametersTest):
     self._testBadValue((0.0, 1.0))
 
   def testValueTooHigh(self):
-    self._testBadValue((1.0, 1.1))
-    self._testBadValue((1.1, 1.2))
-
-
-class ControlShareRangeTest(TBRMMDesignParametersTest):
-
-  name = 'control_share_range'
-  default_error_message = r'{} must be > 0\.0 and < 1\.0'
-
-  def testRangeStructure(self):
-    self._testRangeStructure()
-
-  def testRangeNonNumeric(self):
-    self._testRangeNonNumeric()
-
-  def testRangeInverted(self):
-    self._testBadValue((0.3, 0.2), 'Lower bound of {} must be < upper bound')
-
-  def testValueNoneOk(self):
-    self._testValueNoneOk()
-
-  def testValueOk(self):
-    self._testValueOk((0.1, 0.3))
-
-  def testValueTooLow(self):
-    self._testBadValue((-1.0, -0.1))
-    self._testBadValue((-1.0, 0.0))
-    self._testBadValue((0.0, 1.0))
-
-  def testValueTooHigh(self):
-    self._testBadValue((1.0, 1.1))
-    self._testBadValue((1.1, 1.2))
-
-
-class ExcludedShareRangeTest(TBRMMDesignParametersTest):
-
-  name = 'excluded_share_range'
-  default_error_message = r'{} must be >= 0\.0 and < 1\.0'
-
-  def testRangeStructure(self):
-    self._testRangeStructure()
-
-  def testRangeNonNumeric(self):
-    self._testRangeNonNumeric()
-
-  def testRangeInverted(self):
-    self._testBadValue((0.3, 0.2), 'Lower bound of {} must be < upper bound')
-
-  def testValueNoneOk(self):
-    self._testValueNoneOk()
-
-  def testValueOk(self):
-    self._testValueOk((0.1, 0.3))
-
-  def testValueTooLow(self):
-    self._testBadValue((-1.0, -0.1))
-    self._testBadValue((-1.0, 0.0))
-
-  def testValueTooHigh(self):
-    self._testBadValue((0.0, 1.0))
     self._testBadValue((1.0, 1.1))
     self._testBadValue((1.1, 1.2))
 
