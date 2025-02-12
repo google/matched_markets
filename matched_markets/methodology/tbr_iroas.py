@@ -15,14 +15,15 @@
 """Time Based Regression geoexperiment methodology for iROAS.
 """
 
-from matched_markets.methodology import base
 from matched_markets.methodology import common_classes
-from matched_markets.methodology import tbr
+from matched_markets.methodology import semantics
+from matched_markets.methodology import utils
+from matched_markets.methodology.tbr import TBR
 import numpy as np
 import pandas as pd
 
 
-class TBRiROAS(base.BaseReporting):
+class TBRiROAS():
   """Time Based Regression geoexperiment methodology.
 
   This class estimates the incremental Return on Ad Spend (iROAS)
@@ -30,10 +31,90 @@ class TBRiROAS(base.BaseReporting):
   For details see [Kerman 2017](https://ai.google/research/pubs/pub45950).
   """
 
-  def initialize_regression_model(self):
-    """Initializes the parameteric TBR regression model."""
-    self.tbr_response = tbr.TBR(use_cooldown=self.use_cooldown)
-    self.tbr_cost = tbr.TBR(use_cooldown=self.use_cooldown)
+  def __init__(self, use_cooldown=True):
+    """Initializes a TBR iROAS analysis.
+
+    Args:
+      use_cooldown: bool. Whether to include the cooldown period in test.
+    """
+    self.df_names = None
+    self.groups = None
+    self.periods = None
+    self.analysis_data = None
+    self.target = None
+    # Set up container for the response model, and potentially a cost model.
+    self.tbr_cost = TBR(use_cooldown=use_cooldown)
+    self.tbr_response = TBR(use_cooldown=use_cooldown)
+    self.use_cooldown = use_cooldown
+
+  def fit(self, data_frame, **kwargs):
+    """Fit the TBRiROAS model to the supplied data frame.
+
+    See optional kwargs for interpretation of the data frame.
+
+    Args:
+      data_frame: a pandas.DataFrame. Should contain the columns and indices
+      corresponding to the **kwargs information below. Must be indexed by date.
+      **kwargs: optional column/index names for the data and related semantics:
+        key_geo='geo' - geo data frame index name.
+        key_period='period' - experimental period column name.
+        key_group='group' - group assignment column name.
+        key_cost='cost' - cost column name.
+        key_response='response' - response column name.
+        key_date='date' - date index name.
+        key_incr_cost='_incr_cost' - incremental cost column name.
+        key_incr_response='_incr_response' - incremental response column name.
+        group_control=1 - value representing the control group in the data.
+        group_treat=2 - value representing the treatment group in the data.
+        period_pre=0 - value representing the pre-test period in the data.
+        period_test=1 - value representing the test period in the data.
+        period_cool=2 - value representing the cooldown period in the data.
+    """
+
+    # Extract any column / index name information supplied by the user
+    user_df_names = utils.kwarg_subdict('key_', **kwargs)
+    self.df_names = semantics.DataFrameNameMapping(**user_df_names)
+
+    # Extract any semantics for control / treatment supplied by user
+    user_group_semantics = utils.kwarg_subdict('group_', **kwargs)
+    self.groups = semantics.GroupSemantics(**user_group_semantics)
+
+    # Extract any semantics for experimental period supplied by user
+    user_period_semantics = utils.kwarg_subdict('period_', **kwargs)
+    self.periods = semantics.PeriodSemantics(**user_period_semantics)
+
+    # Fit seprate TBR models for response and cost
+    self.tbr_response.fit(data_frame, self.df_names.response, **kwargs)
+    self.tbr_cost.fit(data_frame, self.df_names.cost, **kwargs)
+
+  def _is_fixed_cost_scenario(self):
+    """Determines whether we are dealing with a fixed cost scenario.
+
+    Returns:
+      `bool`. True iff the sum of costs outside the treatment group in the test
+        period is approx equal to zero.
+    """
+
+    # Access the relevant analysis data.
+    adata = self.tbr_cost.analysis_data
+
+    # Short names for important variables.
+    key_cost = self.df_names.cost
+    pre = self.periods.pre
+    test = self.periods.test
+    cntrl = self.groups.control
+
+    # Get the cost data for the pre-period.
+    pre_costs = adata.loc[adata[self.df_names.period] == pre][key_cost]
+    # Get the cost data for the test-period for the control group.
+    subset = adata.loc[adata[self.df_names.period] == test]
+    test_costs_cntrl = subset.loc[cntrl][key_cost]
+    # Sum of costs.
+    tot_costs = sum(pre_costs) + sum(test_costs_cntrl)
+
+    # Declare the costs to be zero if their sum is very small.
+    tot_costs_order = utils.float_order(tot_costs)
+    return tot_costs_order < -10
 
   def summary(self,
               level=0.9,
@@ -41,7 +122,7 @@ class TBRiROAS(base.BaseReporting):
               tails=1,
               nsims=10000,
               random_state=None):
-    """Estimates the control-treatment relationship in the post- period.
+    """Estimates the control-treatment relationship in the pre- period.
 
     Args:
       level: `float` in (0,1). Determines width of CIs.
