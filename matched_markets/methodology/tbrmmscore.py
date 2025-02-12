@@ -84,9 +84,6 @@ class TBRMMScore:
       Score of the design defined by the treatment and control groups as in diag
       and according to the design parameters.
     """
-    assert self.diag.aatest is not None
-    assert self.diag.bbtest is not None
-    assert self.diag.dwtest is not None
     if self._score is None:
       self._score = Scoring(
           int(self.diag.corr_test), int(self.diag.aatest.test_ok),
