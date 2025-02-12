@@ -61,7 +61,8 @@ class TBRDiagnosticsTest(unittest.TestCase):
     diag = tbrdiag._diagnostics
     self.assertIsInstance(diag, dict)
     self.assertIsNone(diag['corr_test'])
-    self.assertIsNone(diag['noisy_geos'])
+    self.assertIsNone(diag['enough_data'])
+    self.assertIsNone(diag['pretest_start'])
     self.assertIsNone(diag['outlier_dates'])
 
     # Accessors.
@@ -221,7 +222,7 @@ class TBRDiagnosticsTest(unittest.TestCase):
                      'outlier_dataset.csv')) as csvfile:
       data = pd.read_csv(csvfile, parse_dates=['date'])
     tbrdiag.fit(data)
-    self.assertEqual(tbrdiag._diagnostics['outlier_dates'], [])
+    self.assertEmpty(tbrdiag._diagnostics['outlier_dates'])
 
   def testNoisyGeos(self):
     """Tests that noisy geos are detected."""
