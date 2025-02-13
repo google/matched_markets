@@ -334,8 +334,9 @@ def plot_iroas_over_time(iroas_df: pd.DataFrame, experiment_dates: pd.DataFrame,
   return iroas_chart
 
 
-def infer_frequency(data: pd.DataFrame, date_index: str,
-                    series_index: str) -> str:
+def infer_frequency(
+    data: pd.DataFrame, date_index: str, series_index: str
+) -> str:
   """Infers frequency of data from pd.DataFrame with multiple indices.
 
   Infers frequency of data from pd.DataFrame with two indices, one for the slice
@@ -364,34 +365,37 @@ def infer_frequency(data: pd.DataFrame, date_index: str,
   series_names = data.index.get_level_values(series_index).unique().tolist()
   series_frequencies = []
   for series in series_names:
-    observed_times = data.iloc[data.index.get_level_values(series_index) ==
-                               series].index.get_level_values(date_index)
+    observed_times = data.iloc[
+        data.index.get_level_values(series_index) == series
+    ].index.get_level_values(date_index)
     n_steps = len(observed_times)
 
     if n_steps > 1:
       time_diffs = (
           observed_times[1:n_steps] -
-          observed_times[0:(n_steps - 1)]).astype('timedelta64[D]').array
+          observed_times[0:(n_steps - 1)]).astype('timedelta64[s]').values
 
-      min_frequency = np.min(time_diffs)
+      # Compute the frequency in days
+      min_frequency = np.min(time_diffs).astype('float') / (60 * 60 * 24)
 
       series_frequencies.append(min_frequency)
 
   if not series_frequencies:
     raise ValueError(
-        'At least one series with more than one observation must be provided.')
+        'At least one series with more than one observation must be provided.'
+    )
 
   if series_frequencies.count(series_frequencies[0]) != len(series_frequencies):
     raise ValueError(
-        'The provided time series seem to have irregular frequencies.')
+        'The provided time series seem to have irregular frequencies.'
+    )
 
   try:
-    frequency = {
-        1: 'D',
-        7: 'W'
-    }[series_frequencies[0]]
+    frequency = {1: 'D', 7: 'W'}[series_frequencies[0]]
   except KeyError:
-    raise ValueError('Frequency could not be identified. Got %d days.' %
-                     series_frequencies[0])
+    raise ValueError(
+        'Frequency could not be identified. Got'
+        f' {int(series_frequencies[0])} days.'
+    )
 
   return frequency
