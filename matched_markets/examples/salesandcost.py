@@ -65,4 +65,3 @@ def example_data_formatted(srcdir):
   """Summon the data."""
   data, geoassign, exdates = example_data(srcdir)
   return format_example_data(data, geoassign, exdates)
-
