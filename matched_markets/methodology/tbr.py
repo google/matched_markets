@@ -252,7 +252,7 @@ class TBR(object):
     # Set up the t-distribution.
     delta_mean = rescale * np.array(np.cumsum(causal_response)).flatten()
     delta_var = var_from_params + var_from_observations
-    delta_scale = rescale * sp.sqrt(delta_var).flatten()
+    delta_scale = rescale * np.sqrt(delta_var).flatten()
     delta_df = self.pre_period_model.df_resid
 
     # Return a frozen t-distribution with the correct parameters.
